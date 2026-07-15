@@ -1,0 +1,57 @@
+// NOTE: This module requires ForgeGradle, which resolves artifacts from
+// files.minecraftforge.net / maven.minecraftforge.net and Mojang's piston-meta service. It is not
+// wired into the root settings.gradle.kts by default because those hosts are unreachable from
+// some sandboxed build environments. Add `include("loader:forge-1.20.1")` to the root
+// settings.gradle.kts and run from a machine with normal internet access. See
+// docs/ADDING_A_LOADER_VERSION.md.
+
+plugins {
+    id 'net.minecraftforge.gradle' version '[6.0,6.2)'
+    id 'org.parchmentmc.librarian.forgegradle' version '1.+'
+}
+
+version = '0.1.0'
+group = 'dev.pluginsync.loader.forge'
+
+base {
+    archivesName = 'pluginsync-forge-1.20.1'
+}
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(17)
+
+minecraft {
+    mappings channel: 'parchment', version: '2023.09.03-1.20.1'
+
+    runs {
+        client {
+            workingDirectory project.file('run')
+            property 'forge.logging.markers', 'REGISTRIES'
+            property 'forge.logging.console.level', 'debug'
+            mods {
+                pluginsync {
+                    source sourceSets.main
+                }
+            }
+        }
+        server {
+            workingDirectory project.file('run-server')
+            property 'forge.logging.markers', 'REGISTRIES'
+            property 'forge.logging.console.level', 'debug'
+            mods {
+                pluginsync {
+                    source sourceSets.main
+                }
+            }
+        }
+    }
+}
+
+dependencies {
+    minecraft 'net.minecraftforge:forge:1.20.1-47.3.0'
+    implementation project(':sync-core')
+}
+
+// Gson ships with Minecraft/Forge itself at runtime - don't shade a second copy into the mod jar.
+configurations.implementation {
+    exclude group: 'com.google.code.gson', module: 'gson'
+}
