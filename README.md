@@ -15,9 +15,7 @@ This repository currently ships:
   a JVM relaunch helper. It has no Minecraft/Forge/NeoForge dependency and is fully unit tested
   (`./gradlew :sync-core:test`).
 - **`loader/forge-1.20.1`** and **`loader/neoforge-1.21.1`** - thin per-loader adapters (client GUI
-  screen + server startup hook) that wire `sync-core` into an actual mod. These are written
-  against the documented Forge/NeoForge APIs but have **not been compiled or run** in the
-  environment this was built in - see [Build Environment Note](#build-environment-note) below.
+  screen + server startup hook) that wire `sync-core` into an actual mod.
 
 CurseForge support is deliberately deferred (see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)) -
 the manifest/download-URL format is provider-agnostic, so it's a matter of adding a new resolver
@@ -25,15 +23,16 @@ alongside `ModrinthClient`, not a redesign.
 
 ## Build environment note
 
-`sync-core` builds and its tests pass with plain `mavenCentral()` access. The two `loader/*`
-modules additionally need ForgeGradle / the NeoForge ModDev plugin, which pull artifacts from
-Mojang's `piston-meta`, `maven.minecraftforge.net`, and `maven.neoforged.net`. Those hosts were
-unreachable in the sandbox this was developed in, so the loader modules could only be
-written/reviewed against known API shapes, not compiled. They are intentionally **not** included
-in the root `settings.gradle.kts` build graph yet - see
-[docs/ADDING_A_LOADER_VERSION.md](docs/ADDING_A_LOADER_VERSION.md) for how to enable and build them
-on a machine with normal internet access, and please fix up any API drift you hit (Forge/NeoForge
-APIs do shift between patch releases).
+`sync-core` only needs plain `mavenCentral()` access. The two `loader/*` modules additionally need
+ForgeGradle / the NeoForge ModDev plugin, which pull artifacts from Mojang's `piston-meta`,
+`maven.minecraftforge.net`, and `maven.neoforged.net` - hosts that aren't reachable from every
+environment (notably: sandboxed agent/CI environments with restrictive network policies). Because
+of that, the loader modules are built and tested in **GitHub Actions CI**
+([.github/workflows/build.yml](.github/workflows/build.yml)), which does have normal internet
+access, rather than being assumed to compile in whatever environment a change was authored in. Both
+loader modules are included in the root `settings.gradle.kts` by default; if you're working
+somewhere without normal internet access to Mojang/Forge/NeoForge, comment them back out locally -
+see [docs/ADDING_A_LOADER_VERSION.md](docs/ADDING_A_LOADER_VERSION.md).
 
 ## Quick start
 
@@ -52,9 +51,10 @@ APIs do shift between patch releases).
 ## Repository layout
 
 ```
-sync-core/                      loader-agnostic sync engine (buildable/testable here)
-loader/forge-1.20.1/            Forge adapter (source-only in this environment, see note above)
-loader/neoforge-1.21.1/         NeoForge adapter (source-only in this environment, see note above)
+sync-core/                      loader-agnostic sync engine
+loader/forge-1.20.1/            Forge adapter (built/tested in CI, see note above)
+loader/neoforge-1.21.1/         NeoForge adapter (built/tested in CI, see note above)
+.github/workflows/build.yml     CI: builds + tests all of the above on every push/PR
 docs/
   ARCHITECTURE.md               protocol, config formats, safety properties
   ADDING_A_LOADER_VERSION.md    how to enable the loader modules / add more MC versions

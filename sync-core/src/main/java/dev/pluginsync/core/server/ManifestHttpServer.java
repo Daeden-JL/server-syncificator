@@ -50,12 +50,22 @@ public final class ManifestHttpServer implements AutoCloseable {
         return httpServer.getAddress().getPort();
     }
 
+    private static final String FILES_CONTEXT_PREFIX = "/plugin-sync/v1/files/";
+
     private void handleManifest(HttpExchange exchange, Supplier<SyncManifest> manifestSupplier) throws IOException {
         if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
             sendError(exchange, 405, "Method Not Allowed");
             return;
         }
-        byte[] body = JsonCodec.toJson(manifestSupplier.get()).getBytes(StandardCharsets.UTF_8);
+
+        byte[] body;
+        try {
+            body = JsonCodec.toJson(manifestSupplier.get()).getBytes(StandardCharsets.UTF_8);
+        } catch (RuntimeException e) {
+            sendError(exchange, 500, "Internal Server Error building manifest");
+            return;
+        }
+
         exchange.getResponseHeaders().add("Content-Type", "application/json; charset=utf-8");
         exchange.sendResponseHeaders(200, body.length);
         try (OutputStream out = exchange.getResponseBody()) {
@@ -70,12 +80,20 @@ public final class ManifestHttpServer implements AutoCloseable {
         }
 
         String path = exchange.getRequestURI().getPath();
-        String prefix = "/plugin-sync/v1/files/";
-        String rawName = path.substring(path.indexOf(prefix) + prefix.length());
+        if (!path.startsWith(FILES_CONTEXT_PREFIX)) {
+            sendError(exchange, 400, "Bad Request");
+            return;
+        }
+        String rawName = path.substring(FILES_CONTEXT_PREFIX.length());
         String fileName = URLDecoder.decode(rawName, StandardCharsets.UTF_8);
 
-        // Reject anything that isn't a bare file name - no traversal, no subdirectories.
-        if (fileName.isEmpty() || fileName.contains("/") || fileName.contains("\\") || fileName.contains("..")) {
+        // Reject anything that isn't a bare *.jar file name - no traversal, no subdirectories, and
+        // nothing else in the mods folder is ever exposed through this endpoint.
+        if (fileName.isEmpty()
+                || fileName.contains("/")
+                || fileName.contains("\\")
+                || fileName.contains("..")
+                || !fileName.toLowerCase(java.util.Locale.ROOT).endsWith(".jar")) {
             sendError(exchange, 400, "Bad Request");
             return;
         }

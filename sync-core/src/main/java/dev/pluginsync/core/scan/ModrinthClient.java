@@ -3,6 +3,7 @@ package dev.pluginsync.core.scan;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParseException;
 import dev.pluginsync.core.json.JsonCodec;
 
 import java.io.IOException;
@@ -66,23 +67,53 @@ public class ModrinthClient {
             throw new IOException("Modrinth API returned HTTP " + response.statusCode() + " for version " + versionId);
         }
 
-        JsonObject body = JsonCodec.gson().fromJson(response.body(), JsonObject.class);
-        JsonArray files = body.getAsJsonArray("files");
+        JsonObject body;
+        try {
+            body = JsonCodec.gson().fromJson(response.body(), JsonObject.class);
+        } catch (JsonParseException | IllegalStateException e) {
+            throw new IOException("Modrinth returned unparseable JSON for version " + versionId, e);
+        }
+        if (body == null) {
+            throw new IOException("Modrinth returned an empty response for version " + versionId);
+        }
+
+        JsonArray files;
+        try {
+            files = body.getAsJsonArray("files");
+        } catch (RuntimeException e) {
+            throw new IOException("Modrinth response 'files' field for version " + versionId + " was not an array", e);
+        }
         if (files == null || files.isEmpty()) {
             throw new IOException("Modrinth version " + versionId + " has no files");
         }
 
-        JsonObject chosen = pickPrimary(files).orElseGet(() -> files.get(0).getAsJsonObject());
-        String fileName = chosen.get("filename").getAsString();
-        String url = chosen.get("url").getAsString();
-        long size = chosen.has("size") ? chosen.get("size").getAsLong() : -1L;
-        JsonObject hashes = chosen.getAsJsonObject("hashes");
-        String sha256 = hashes != null && hashes.has("sha256") ? hashes.get("sha256").getAsString() : null;
-        if (sha256 == null) {
-            throw new IOException("Modrinth version " + versionId + " file has no sha256 hash");
+        JsonObject chosen;
+        try {
+            chosen = pickPrimary(files).orElseGet(() -> files.get(0).getAsJsonObject());
+        } catch (RuntimeException e) {
+            throw new IOException("Modrinth version " + versionId + " has a malformed file entry", e);
         }
 
-        return new ResolvedFile(fileName, url, sha256, size);
+        try {
+            String fileName = requireString(chosen, "filename", versionId);
+            String url = requireString(chosen, "url", versionId);
+            long size = chosen.has("size") && chosen.get("size").isJsonPrimitive() ? chosen.get("size").getAsLong() : -1L;
+            JsonObject hashes = chosen.has("hashes") ? chosen.getAsJsonObject("hashes") : null;
+            String sha256 = hashes != null && hashes.has("sha256") ? hashes.get("sha256").getAsString() : null;
+            if (sha256 == null || sha256.isEmpty()) {
+                throw new IOException("Modrinth version " + versionId + " file has no sha256 hash");
+            }
+            return new ResolvedFile(fileName, url, sha256, size);
+        } catch (RuntimeException e) {
+            throw new IOException("Modrinth version " + versionId + " returned an unexpected file shape", e);
+        }
+    }
+
+    private static String requireString(JsonObject object, String field, String versionId) throws IOException {
+        if (!object.has(field) || !object.get(field).isJsonPrimitive()) {
+            throw new IOException("Modrinth version " + versionId + " file is missing required field '" + field + "'");
+        }
+        return object.get(field).getAsString();
     }
 
     private static Optional<JsonObject> pickPrimary(JsonArray files) {

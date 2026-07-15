@@ -63,7 +63,10 @@ class SyncSessionIntegrationTest {
         if (httpServer != null) {
             httpServer.close();
         }
-        AtomicReference<SyncManifest> manifestRef = new AtomicReference<>();
+        // Never let the supplier observe null: initialize with an (empty) placeholder before the
+        // server starts accepting connections, so a request racing the real build below always
+        // sees a valid manifest rather than a transient null.
+        AtomicReference<SyncManifest> manifestRef = new AtomicReference<>(SyncManifest.of("", "", List.of()));
         httpServer = new ManifestHttpServer("127.0.0.1", 0, serverModsDir, manifestRef::get);
         httpServer.start();
         boundPort = httpServer.port();

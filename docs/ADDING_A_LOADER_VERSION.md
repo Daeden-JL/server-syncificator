@@ -1,20 +1,23 @@
 # Enabling the loader modules / adding another Minecraft version
 
-## Enabling the two reference modules (Forge 1.20.1, NeoForge 1.21.1)
+## The two reference modules (Forge 1.20.1, NeoForge 1.21.1)
 
-These aren't wired into the root build by default because building them requires
-`maven.minecraftforge.net`, `maven.neoforged.net`, and Mojang's `piston-meta` service, which
-weren't reachable in the sandbox this repo was scaffolded in. On a machine with normal internet
-access:
+Both are included in the root `settings.gradle.kts` by default and are built/tested by
+[.github/workflows/build.yml](../.github/workflows/build.yml) on every push and pull request.
+Building them requires `maven.minecraftforge.net`, `maven.neoforged.net`, and Mojang's
+`piston-meta` service - reachable from GitHub Actions' runners, but not from every environment
+(notably: sandboxed agent/CI environments with restrictive network policies). If you're working
+somewhere without normal internet access to those hosts, comment the two `include(...)` lines back
+out in `settings.gradle.kts` and rely on CI (or a machine with normal internet access) to verify
+loader-module changes instead of a local `./gradlew build`.
 
-1. Uncomment the two `include(...)` lines in `settings.gradle.kts`.
-2. Run `./gradlew build`. ForgeGradle/NeoForge ModDev will download the Minecraft/mapping/loader
-   artifacts on first run (this takes a while and several GB of disk the first time).
-3. Fix up any compile errors from API drift - the loader modules were written against documented
-   API shapes from memory, not compiled, so treat the first build as a review pass. Likely trouble
-   spots: exact `FMLJavaModLoadingContext`/constructor-injection details for NeoForge (the mod
-   constructor event-bus wiring is the part most likely to have shifted between NeoForge patch
-   versions), and the Forge/NeoForge version numbers pinned in each `build.gradle`.
+On a machine (or CI run) with normal internet access, the first build downloads the
+Minecraft/mapping/loader artifacts (this takes a while and several GB of disk the first time), then
+compiles normally. If you're porting these modules to a new Forge/NeoForge patch version and hit
+compile errors, likely trouble spots are: exact `FMLJavaModLoadingContext`/constructor-injection
+details for NeoForge (the mod constructor event-bus wiring is the part most likely to have shifted
+between NeoForge patch versions), and the Forge/NeoForge version numbers pinned in each
+`build.gradle`.
 
 ## Adding another Minecraft version or loader
 

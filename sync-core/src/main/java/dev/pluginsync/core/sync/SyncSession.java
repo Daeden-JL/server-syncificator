@@ -76,7 +76,12 @@ public final class SyncSession {
         for (String fileName : plan.toDelete()) {
             index++;
             listener.accept(new SyncEvent.Deleting(fileName, index, totalFiles));
-            Files.deleteIfExists(modsDir.resolve(fileName));
+            try {
+                Files.deleteIfExists(modsDir.resolve(fileName));
+            } catch (IOException e) {
+                listener.accept(new SyncEvent.Failed("Failed to remove " + fileName + ": " + e.getMessage(), e));
+                throw e;
+            }
             state.managedFiles().remove(fileName);
         }
 
@@ -117,7 +122,12 @@ public final class SyncSession {
     private SyncEvent.Complete finish(ManagedState state, boolean changed) throws IOException {
         listener.accept(new SyncEvent.Finalizing());
         state.setLastServerAddress(baseUrl);
-        saveManagedState(state);
+        try {
+            saveManagedState(state);
+        } catch (IOException e) {
+            listener.accept(new SyncEvent.Failed("Failed to save sync state: " + e.getMessage(), e));
+            throw e;
+        }
         SyncEvent.Complete complete = new SyncEvent.Complete(changed);
         listener.accept(complete);
         return complete;
