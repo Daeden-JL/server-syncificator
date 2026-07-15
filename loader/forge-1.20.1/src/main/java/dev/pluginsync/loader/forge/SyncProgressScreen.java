@@ -62,7 +62,9 @@ public final class SyncProgressScreen extends Screen {
             } else {
                 finished = true;
             }
-        } catch (IOException e) {
+        } catch (Exception e) {
+            // Catches unchecked failures too (not just IOException) - anything escaping here would
+            // otherwise kill this daemon thread silently and leave the UI stuck mid-sync forever.
             errorMessage = e.getMessage() == null ? e.toString() : e.getMessage();
             finished = true;
         }

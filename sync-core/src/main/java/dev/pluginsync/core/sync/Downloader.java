@@ -9,6 +9,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -54,7 +55,7 @@ public final class Downloader {
                         throw new IOException("Hash mismatch downloading " + entry.fileName() + " from " + url
                                 + " (expected " + entry.sha256() + ", got " + actualHash + ")");
                     }
-                    Files.move(tempPath, finalPath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+                    moveIntoPlace(tempPath, finalPath);
                     return;
                 } catch (IOException e) {
                     lastFailure = e;
@@ -64,6 +65,20 @@ public final class Downloader {
         }
 
         throw new IOException("All download sources failed for " + entry.fileName(), lastFailure);
+    }
+
+    /**
+     * Moves the downloaded temp file into place, preferring an atomic rename but falling back to
+     * a plain (non-atomic) replace if the filesystem doesn't support atomic moves for this pair of
+     * paths (observed on some network/overlay filesystems) - the file is already fully written and
+     * hash-verified at this point, so a non-atomic replace here is still safe.
+     */
+    private static void moveIntoPlace(Path tempPath, Path finalPath) throws IOException {
+        try {
+            Files.move(tempPath, finalPath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        } catch (AtomicMoveNotSupportedException e) {
+            Files.move(tempPath, finalPath, StandardCopyOption.REPLACE_EXISTING);
+        }
     }
 
     private String downloadOnce(String url, Path tempPath, long expectedSize, ProgressListener progressListener) throws IOException {

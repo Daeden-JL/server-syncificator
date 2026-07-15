@@ -1,8 +1,15 @@
 package dev.pluginsync.core.serverlist;
 
+import dev.pluginsync.core.serverlist.NbtTag.NbtCompound;
+import dev.pluginsync.core.serverlist.NbtTag.NbtList;
+import dev.pluginsync.core.serverlist.NbtTag.NbtString;
 import dev.pluginsync.core.serverlist.ServersDatEditor.ServerListEntry;
 import org.junit.jupiter.api.Test;
 
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -65,5 +72,52 @@ class ServersDatEditorTest {
         List<ServerListEntry> entries = ServersDatEditor.readEntries(serversDat);
         assertEquals("iconbase64data", entries.get(0).icon());
         assertTrue(entries.get(0).acceptTextures());
+    }
+
+    @Test
+    void updatingAnExistingEntryPreservesFieldsThisCodebaseDoesNotKnowAbout(@org.junit.jupiter.api.io.TempDir Path tempDir) throws IOException {
+        Path serversDat = tempDir.resolve("servers.dat");
+        ServersDatEditor.upsertPinnedToTop(serversDat, new ServerListEntry("Managed", "managed.example.com"));
+
+        // Simulate the game (or another mod) having added a field we don't model, e.g. "moreInfo".
+        addUnknownFieldToMatchingEntry(serversDat, "managed.example.com", "moreInfo", "some-vanilla-metadata");
+
+        // Re-run the upsert, as happens on every client startup - this must not drop the field.
+        ServersDatEditor.upsertPinnedToTop(serversDat, new ServerListEntry("Managed (renamed)", "managed.example.com"));
+
+        assertEquals("some-vanilla-metadata", readUnknownFieldFromMatchingEntry(serversDat, "managed.example.com", "moreInfo"));
+        assertEquals("Managed (renamed)", ServersDatEditor.readEntries(serversDat).get(0).name());
+    }
+
+    private static void addUnknownFieldToMatchingEntry(Path file, String ip, String key, String value) throws IOException {
+        NbtCompound root;
+        try (DataInputStream in = new DataInputStream(new BufferedInputStream(Files.newInputStream(file)))) {
+            root = NbtIo.readRootCompound(in);
+        }
+        if (root.get("servers") instanceof NbtList list) {
+            for (NbtTag tag : list.values()) {
+                if (tag instanceof NbtCompound c && ip.equalsIgnoreCase(c.getString("ip", ""))) {
+                    c.put(key, new NbtString(value));
+                }
+            }
+        }
+        try (DataOutputStream out = new DataOutputStream(new BufferedOutputStream(Files.newOutputStream(file)))) {
+            NbtIo.writeRootCompound(out, root);
+        }
+    }
+
+    private static String readUnknownFieldFromMatchingEntry(Path file, String ip, String key) throws IOException {
+        NbtCompound root;
+        try (DataInputStream in = new DataInputStream(new BufferedInputStream(Files.newInputStream(file)))) {
+            root = NbtIo.readRootCompound(in);
+        }
+        if (root.get("servers") instanceof NbtList list) {
+            for (NbtTag tag : list.values()) {
+                if (tag instanceof NbtCompound c && ip.equalsIgnoreCase(c.getString("ip", "")) && c.get(key) instanceof NbtString s) {
+                    return s.value();
+                }
+            }
+        }
+        return null;
     }
 }

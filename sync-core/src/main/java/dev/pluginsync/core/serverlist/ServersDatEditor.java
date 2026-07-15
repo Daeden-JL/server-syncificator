@@ -14,6 +14,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 
 /**
@@ -58,17 +59,32 @@ public final class ServersDatEditor {
             serverList = new ArrayList<>();
         }
 
-        serverList.removeIf(tag -> tag instanceof NbtCompound c && entry.ip().equalsIgnoreCase(c.getString("ip", "")));
-
-        NbtCompound newEntry = new NbtCompound();
-        newEntry.put("name", new NbtString(entry.name()));
-        newEntry.put("ip", new NbtString(entry.ip()));
-        if (entry.icon() != null) {
-            newEntry.put("icon", new NbtString(entry.icon()));
+        // Reuse (rather than discard) the existing matching entry so any fields this codebase
+        // doesn't know about (icons, "moreInfo", client-added tags, ...) survive the update - only
+        // the four fields we actually manage are overwritten.
+        NbtCompound targetEntry = null;
+        Iterator<NbtTag> iterator = serverList.iterator();
+        while (iterator.hasNext()) {
+            NbtTag tag = iterator.next();
+            if (tag instanceof NbtCompound c && entry.ip().equalsIgnoreCase(c.getString("ip", ""))) {
+                if (targetEntry == null) {
+                    targetEntry = c;
+                }
+                iterator.remove();
+            }
         }
-        newEntry.put("acceptTextures", new NbtByte((byte) (entry.acceptTextures() ? 1 : 0)));
+        if (targetEntry == null) {
+            targetEntry = new NbtCompound();
+        }
 
-        serverList.add(0, newEntry);
+        targetEntry.put("name", new NbtString(entry.name()));
+        targetEntry.put("ip", new NbtString(entry.ip()));
+        if (entry.icon() != null) {
+            targetEntry.put("icon", new NbtString(entry.icon()));
+        }
+        targetEntry.put("acceptTextures", new NbtByte((byte) (entry.acceptTextures() ? 1 : 0)));
+
+        serverList.add(0, targetEntry);
         root.put("servers", new NbtList(elementTypeId, serverList));
 
         writeAtomically(serversDatFile, root);
