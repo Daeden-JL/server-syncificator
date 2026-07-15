@@ -24,5 +24,26 @@ jobs:
             21
           cache: gradle
 
+      # The NeoForge ModDev plugin fetches its Minecraft/userdev artifact by literal URL rather
+      # than through normal Gradle dependency resolution, so a "+" version range in build.gradle
+      # doesn't work there - it needs one concrete build number. maven.neoforged.net isn't
+      # reachable from every environment this project is built in, so resolve the latest 1.21.1
+      # build here (where it is reachable) instead of hardcoding a version that will go stale.
+      - name: Resolve latest NeoForge 1.21.1 build
+        id: neoforge_version
+        run: |
+          set -euo pipefail
+          VERSION=$(curl -fsSL https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml \
+            | grep -oE '<version>21\.1\.[0-9]+</version>' \
+            | sed -E 's#</?version>##g' \
+            | sort -t. -k3,3n \
+            | tail -1)
+          if [ -z "$VERSION" ]; then
+            echo "Could not resolve a NeoForge 1.21.1 version from maven-metadata.xml" >&2
+            exit 1
+          fi
+          echo "Resolved NeoForge version: $VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
       - name: Build and test everything (sync-core + loader modules)
-        run: ./gradlew build --stacktrace
+        run: ./gradlew build --stacktrace -PneoForgeVersion=${{ steps.neoforge_version.outputs.version }}
