@@ -1,0 +1,36 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch: {}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDKs
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: |
+            17
+            21
+          cache: gradle
+
+      - name: Build mod jars
+        run: ./gradlew build --stacktrace
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            loader/forge-1.20.1/build/libs/*.jar
+            loader/neoforge-1.21.1/build/libs/*.jar

@@ -20,10 +20,9 @@ java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 neoForge {
     // NeoForge's ModDev plugin fetches this exact artifact by URL rather than resolving it as a
     // normal Gradle dependency, so a "+"/range version doesn't work here - it needs a concrete
-    // build number. CI resolves the latest 1.21.1 build from maven-metadata.xml at build time and
-    // passes it as -PneoForgeVersion=..., since that Maven host isn't reachable from every
-    // environment this project is built in. The fallback below is just a reasonable local default.
-    version = project.findProperty('neoForgeVersion') ?: '21.1.98'
+    // build number. Pinned to match the target test server (SnowGlobe, running 21.1.233).
+    // Override locally with -PneoForgeVersion=... if you need to build against a different build.
+    version = project.findProperty('neoForgeVersion') ?: '21.1.233'
 
     parchment {
         minecraftVersion = "1.21.1"
