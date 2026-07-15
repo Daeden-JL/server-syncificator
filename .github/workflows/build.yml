@@ -1,0 +1,28 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # Installs both 17 (required by Forge 1.20.1) and 21 (required by NeoForge 1.21.1 and used
+      # to run Gradle itself). setup-java also exports JAVA_HOME_17_X64 / JAVA_HOME_21_X64, which
+      # Gradle's toolchain auto-detection picks up automatically.
+      - name: Set up JDKs
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: |
+            17
+            21
+          cache: gradle
+
+      - name: Build and test everything (sync-core + loader modules)
+        run: ./gradlew build --stacktrace
