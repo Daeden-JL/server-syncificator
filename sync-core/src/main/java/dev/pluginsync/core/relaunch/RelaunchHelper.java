@@ -16,9 +16,11 @@ import java.util.List;
  * auto-syncing again immediately), starts the new process attached to the same console, and
  * leaves it to the caller to then exit the current JVM.
  *
- * <p>This is inherently best-effort: some launchers/sandboxes restrict reading back the full
- * command line, in which case {@link #relaunch()} throws and the caller should fall back to
- * telling the user to restart manually.
+ * <p>This is inherently best-effort, and on Windows it never works: the JDK only populates
+ * {@link ProcessHandle.Info#arguments()} on platforms that expose a process's command line, so
+ * {@link #relaunch()} always throws there. That isn't a failure of the sync - the mods folder is
+ * already updated by the time this is called - so callers must present it as "restart to apply",
+ * not as an error.
  */
 public final class RelaunchHelper {
 
@@ -44,8 +46,12 @@ public final class RelaunchHelper {
         ProcessHandle.Info info = ProcessHandle.current().info();
         String command = info.command().orElseThrow(
                 () -> new IOException("Current process command is not available - cannot self-relaunch"));
+        // Windows never populates this: the JDK only implements arguments() where the OS exposes a
+        // process's command line (/proc/<pid>/cmdline on Linux), so self-relaunch is unavailable
+        // there entirely rather than intermittently. Callers must treat it as "ask the user to
+        // restart", not as a sync failure.
         String[] arguments = info.arguments().orElseThrow(
-                () -> new IOException("Current process arguments are not available - cannot self-relaunch"));
+                () -> new IOException("this platform does not expose the launch command line"));
 
         List<String> fullCommand = new ArrayList<>(arguments.length + 2);
         fullCommand.add(command);

@@ -45,6 +45,8 @@ public final class SyncProgressScreen extends Screen {
     private volatile boolean finished = false;
     private volatile String errorMessage = null;
     private volatile boolean relaunchTriggered = false;
+    /** Sync worked, but the game couldn't restart itself - distinct from a failure. */
+    private volatile boolean restartNeeded = false;
 
     protected SyncProgressScreen(ClientConfig config, Screen parent) {
         super(Component.literal("Syncing mods"));
@@ -119,12 +121,15 @@ public final class SyncProgressScreen extends Screen {
                 minecraft.execute(() -> minecraft.stop());
             }
         } catch (IOException e) {
-            errorMessage = "Sync finished, but automatic restart failed (" + e.getMessage() + "). Please restart the game manually.";
-            // The mods folder did change - it's the restart that didn't happen - so the title
-            // screen should keep asking for one rather than claim everything is up to date.
-            SyncStatus.set(SyncStatus.State.RESTART_REQUIRED, "automatic restart failed");
-            LOGGER.log(Level.SEVERE, "Daeden's Server Syncificator: sync succeeded but the automatic "
-                    + "restart failed - the mods folder is updated, restart manually to apply it", e);
+            // Not a failure - the sync itself worked and the mods folder is already updated, only
+            // the convenience restart didn't happen. Windows never exposes the launch command at
+            // all (ProcessHandle.arguments() is empty there), so this is the normal path on that
+            // platform rather than something going wrong; saying "sync failed" would be a lie.
+            restartNeeded = true;
+            statusLine.set("Mods updated - restart to apply");
+            SyncStatus.set(SyncStatus.State.RESTART_REQUIRED, "automatic restart unavailable");
+            LOGGER.log(Level.INFO, "Daeden's Server Syncificator: mods are updated, but this platform "
+                    + "won't let the game restart itself (" + e.getMessage() + ") - restart manually to apply them.");
             finished = true;
         }
     }
@@ -135,7 +140,9 @@ public final class SyncProgressScreen extends Screen {
         while ((event = events.poll()) != null) {
             applyEvent(event);
         }
-        if (finished && errorMessage == null && !relaunchTriggered && minecraft != null) {
+        // restartNeeded keeps the screen up: closing straight to the title screen would hide the
+        // one instruction the player actually has to act on.
+        if (finished && errorMessage == null && !restartNeeded && !relaunchTriggered && minecraft != null) {
             minecraft.setScreen(new TitleScreen());
         }
     }
@@ -188,7 +195,16 @@ public final class SyncProgressScreen extends Screen {
 
         if (errorMessage != null) {
             renderError(graphics);
+        } else if (restartNeeded) {
+            renderRestartNeeded(graphics);
         }
+    }
+
+    /** Amber, not red, and no "failed": the mods are in place, they just aren't loaded yet. */
+    private void renderRestartNeeded(GuiGraphics graphics) {
+        graphics.drawCenteredString(font, "Your mods are up to date.", width / 2, height / 2 + 34, 0xFFFFAA00);
+        graphics.drawCenteredString(font, "Please restart the game to load them.", width / 2, height / 2 + 46, 0xFFFFAA00);
+        graphics.drawCenteredString(font, "Press Escape to continue.", width / 2, height - 24, 0xFF888888);
     }
 
     /**
@@ -219,7 +235,8 @@ public final class SyncProgressScreen extends Screen {
 
     @Override
     public boolean shouldCloseOnEsc() {
-        return errorMessage != null;
+        // Only once the screen has nothing left to do - never mid-sync.
+        return errorMessage != null || restartNeeded;
     }
 
     @Override
