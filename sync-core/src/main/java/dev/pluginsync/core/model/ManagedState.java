@@ -4,7 +4,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Tracks which files in the mods folder are "owned" by plugin-sync, and what hash was installed
+ * Tracks which files in the mods folder are "owned" by server-syncificator, and what hash was installed
  * for each. This is the safety net that lets the diff engine tell the difference between "the
  * server stopped shipping this mod, delete it" and "the user manually added this jar, leave it
  * alone" — only files present in this state are ever candidates for deletion.

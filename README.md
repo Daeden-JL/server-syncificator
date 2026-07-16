@@ -1,4 +1,4 @@
-# plugin-sync
+# server-syncificator
 
 Keeps a Forge/NeoForge client's mods folder in sync with a server before it connects: on
 launch, the client fetches a manifest from a small companion HTTP endpoint the server exposes,
@@ -51,7 +51,7 @@ see [docs/ADDING_A_LOADER_VERSION.md](docs/ADDING_A_LOADER_VERSION.md).
    The sync endpoint is a plain HTTP server on its own port (`httpPort`, default **25585**) -
    separate from Minecraft's own port, and configurable in that file. Open/forward it alongside
    25565.
-2. Restart the server. It now serves a manifest on `http://<publicHost>:<httpPort>/plugin-sync/v1/manifest`.
+2. Restart the server. It now serves a manifest on `http://<publicHost>:<httpPort>/daedens-server-syncificator/v1/manifest`.
 3. **Client**: put the matching mod jar in the client's `mods` folder and launch once. The mod
    writes `config/daedens-server-syncificator-client.json` and stays idle until you point it at a
    server, either by editing that file or in-game via **Mods > Daeden's Server Syncificator >

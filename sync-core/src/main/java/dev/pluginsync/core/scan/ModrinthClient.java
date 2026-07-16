@@ -50,7 +50,7 @@ public class ModrinthClient {
     public ResolvedFile resolveVersion(String versionId) throws IOException {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + "/version/" + versionId))
-                .header("User-Agent", "plugin-sync/0.1.0 (dev.pluginsync)")
+                .header("User-Agent", "server-syncificator/0.1.0 (dev.pluginsync)")
                 .timeout(Duration.ofSeconds(15))
                 .GET()
                 .build();

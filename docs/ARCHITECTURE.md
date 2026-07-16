@@ -5,7 +5,7 @@
 Forge and NeoForge both load every mod jar once, onto classloaders built at JVM startup. There is
 no supported way to add, remove, or replace a mod jar in a running client. So "sync then apply"
 fundamentally means "sync, then start a new JVM with the updated mods folder" - there's no
-in-session trick that avoids this for actual mod-jar changes. `plugin-sync` embraces that: it syncs
+in-session trick that avoids this for actual mod-jar changes. `server-syncificator` embraces that: it syncs
 during the loading/title-screen phase, then relaunches itself once, automatically, before the
 player ever reaches the "Play"/"Multiplayer" button.
 
@@ -34,7 +34,7 @@ tested exactly once.
 
 ## Wire protocol
 
-`GET {baseUrl}/plugin-sync/v1/manifest` → JSON `SyncManifest`:
+`GET {baseUrl}/daedens-server-syncificator/v1/manifest` → JSON `SyncManifest`:
 
 ```json
 {
@@ -46,7 +46,7 @@ tested exactly once.
       "fileName": "jei-1.20.1.jar",
       "sha256": "...",
       "size": 123456,
-      "downloadUrls": ["https://cdn.modrinth.com/data/.../jei.jar", "http://host:25585/plugin-sync/v1/files/jei-1.20.1.jar"],
+      "downloadUrls": ["https://cdn.modrinth.com/data/.../jei.jar", "http://host:25585/daedens-server-syncificator/v1/files/jei-1.20.1.jar"],
       "side": "BOTH"
     }
   ]
@@ -56,7 +56,7 @@ tested exactly once.
 `downloadUrls` is ordered by preference. A client tries each in turn until one both responds and
 hashes to `sha256` - this is how "Modrinth or CurseForge or direct from the server" is expressed:
 the server resolves external sources ahead of time (see `ManifestBuilder`/`ModrinthClient`) and
-always appends its own `GET /plugin-sync/v1/files/{fileName}` as the last, guaranteed-available
+always appends its own `GET /daedens-server-syncificator/v1/files/{fileName}` as the last, guaranteed-available
 entry. The client never talks to Modrinth (or any third party) directly - it only ever does plain
 HTTP GETs against whatever URLs the server handed it, verifying every byte against the hash before
 trusting it.

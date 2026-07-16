@@ -1,7 +1,7 @@
 modLoader = "javafml"
 loaderVersion = "[2,)"
 license = "MIT"
-issueTrackerURL = "https://github.com/daeden-jl/plugin-sync/issues"
+issueTrackerURL = "https://github.com/Daeden-JL/server-syncificator/issues"
 
 [[mods]]
 modId = "daedens_server_syncificator"

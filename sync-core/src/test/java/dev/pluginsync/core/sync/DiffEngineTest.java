@@ -70,7 +70,7 @@ class DiffEngineTest {
 
     @Test
     void unmanagedExtraModIsNeverDeleted() {
-        // "extra.jar" exists locally but was never installed by plugin-sync (not in ManagedState),
+        // "extra.jar" exists locally but was never installed by server-syncificator (not in ManagedState),
         // and the server manifest doesn't mention it either. It must be left completely alone.
         SyncManifest manifest = SyncManifest.of("srv", "", List.of());
         ManagedState state = new ManagedState(); // empty - nothing managed
