@@ -51,9 +51,23 @@ public final class JsonCodec {
             Files.createDirectories(parent);
         }
         Path tmp = Files.createTempFile(parent, path.getFileName().toString(), ".tmp");
-        try (Writer writer = Files.newBufferedWriter(tmp, StandardCharsets.UTF_8)) {
-            GSON.toJson(value, writer);
+        try {
+            try (Writer writer = Files.newBufferedWriter(tmp, StandardCharsets.UTF_8)) {
+                GSON.toJson(value, writer);
+            }
+            Files.move(tmp, path, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        } catch (IOException e) {
+            // A failed write used to abandon its scratch file next to the real one for good, so
+            // every retry left another ".json<random>.tmp" behind in the user's config folder.
+            try {
+                Files.deleteIfExists(tmp);
+            } catch (IOException cleanupFailure) {
+                e.addSuppressed(cleanupFailure);
+            }
+            // FileSystemException renders as a bare "source -> target" when it has no reason
+            // attached, which hides *which* failure it was. toString() keeps the type, so an
+            // AccessDeniedException stops being indistinguishable from any other move failure.
+            throw new IOException("Failed to write " + path + ": " + e, e);
         }
-        Files.move(tmp, path, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
     }
 }

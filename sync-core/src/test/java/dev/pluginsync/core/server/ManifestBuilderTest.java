@@ -66,7 +66,7 @@ class ManifestBuilderTest {
 
         ModEntry entry = manifest.mods().get(0);
         assertEquals(1, entry.downloadUrls().size());
-        assertTrue(entry.downloadUrls().get(0).startsWith("http://host:1234/plugin-sync/v1/files/"));
+        assertTrue(entry.downloadUrls().get(0).startsWith("http://host:1234/daedens-server-syncificator/v1/files/"));
     }
 
     @Test
@@ -90,6 +90,6 @@ class ManifestBuilderTest {
         ModEntry entry = manifest.mods().get(0);
         assertEquals(2, entry.downloadUrls().size());
         assertEquals("https://cdn.modrinth.com/mod.jar", entry.downloadUrls().get(0));
-        assertTrue(entry.downloadUrls().get(1).startsWith("http://host:1234/plugin-sync/v1/files/"));
+        assertTrue(entry.downloadUrls().get(1).startsWith("http://host:1234/daedens-server-syncificator/v1/files/"));
     }
 }

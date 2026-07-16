@@ -5,16 +5,22 @@ import dev.pluginsync.core.relaunch.RelaunchHelper;
 import dev.pluginsync.core.serverlist.ServersDatEditor;
 import dev.pluginsync.core.sync.SyncEvent;
 import dev.pluginsync.core.sync.SyncSession;
+import dev.pluginsync.core.sync.SyncStatus;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.util.FormattedCharSequence;
 import net.minecraftforge.fml.loading.FMLPaths;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Shows sync progress while a background thread runs {@link SyncSession}. All game/render state
@@ -24,10 +30,16 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 public final class SyncProgressScreen extends Screen {
 
+    private static final Logger LOGGER = Logger.getLogger(PluginSyncForge.MOD_ID);
+    private static final int LINE_HEIGHT = 10;
+    private static final int ERROR_MARGIN = 20;
+
     private final ClientConfig config;
     private final Screen parent;
     private final ConcurrentLinkedQueue<SyncEvent> events = new ConcurrentLinkedQueue<>();
     private final AtomicReference<String> statusLine = new AtomicReference<>("Connecting...");
+    /** Guards against {@link #init()} re-running on resize and starting a duplicate sync. */
+    private final AtomicBoolean workerStarted = new AtomicBoolean(false);
 
     private volatile float progress = 0f;
     private volatile boolean finished = false;
@@ -42,14 +54,21 @@ public final class SyncProgressScreen extends Screen {
 
     @Override
     protected void init() {
-        Thread worker = new Thread(this::runSync, "plugin-sync-worker");
+        // Screen.init() runs again on every resize (resize -> repositionElements -> rebuildWidgets
+        // -> init), so without this guard a window resize mid-sync starts a *second* SyncSession
+        // against the same mods folder. The two race on the managed-state write, and on Windows the
+        // loser fails with AccessDeniedException because the file it's replacing is already open.
+        if (!workerStarted.compareAndSet(false, true)) {
+            return;
+        }
+        Thread worker = new Thread(this::runSync, "daedens-server-syncificator-worker");
         worker.setDaemon(true);
         worker.start();
     }
 
     private void runSync() {
         Path modsDir = FMLPaths.MODSDIR.get();
-        Path managedStatePath = FMLPaths.CONFIGDIR.get().resolve("pluginsync-managed.json");
+        Path managedStatePath = FMLPaths.CONFIGDIR.get().resolve("daedens-server-syncificator-managed.json");
 
         try {
             SyncSession session = new SyncSession(config.syncBaseUrl(), modsDir, managedStatePath, events::add);
@@ -60,12 +79,20 @@ public final class SyncProgressScreen extends Screen {
             if (result.restartRequired() && config.autoRestart()) {
                 relaunchAndExit();
             } else {
+                SyncStatus.set(result.restartRequired()
+                        ? SyncStatus.State.RESTART_REQUIRED
+                        : SyncStatus.State.UP_TO_DATE);
                 finished = true;
             }
         } catch (Exception e) {
             // Catches unchecked failures too (not just IOException) - anything escaping here would
             // otherwise kill this daemon thread silently and leave the UI stuck mid-sync forever.
-            errorMessage = e.getMessage() == null ? e.toString() : e.getMessage();
+            String message = e.getMessage() == null ? e.toString() : e.getMessage();
+            errorMessage = message;
+            SyncStatus.set(SyncStatus.State.FAILED, message);
+            // The screen is the only other place this surfaces, and it can't show a stack trace -
+            // without this the cause of a failed sync never reaches the log at all.
+            LOGGER.log(Level.SEVERE, "Daeden's Server Syncificator: sync failed", e);
             finished = true;
         }
     }
@@ -93,6 +120,11 @@ public final class SyncProgressScreen extends Screen {
             }
         } catch (IOException e) {
             errorMessage = "Sync finished, but automatic restart failed (" + e.getMessage() + "). Please restart the game manually.";
+            // The mods folder did change - it's the restart that didn't happen - so the title
+            // screen should keep asking for one rather than claim everything is up to date.
+            SyncStatus.set(SyncStatus.State.RESTART_REQUIRED, "automatic restart failed");
+            LOGGER.log(Level.SEVERE, "Daeden's Server Syncificator: sync succeeded but the automatic "
+                    + "restart failed - the mods folder is updated, restart manually to apply it", e);
             finished = true;
         }
     }
@@ -149,11 +181,36 @@ public final class SyncProgressScreen extends Screen {
         graphics.fill(x, y, x + Math.round(barWidth * Math.min(1f, Math.max(0f, progress))), y + barHeight, 0xFF57C25B);
 
         if (errorMessage != null) {
-            graphics.drawCenteredString(font, "Sync failed: " + errorMessage, width / 2, height / 2 + 36, 0xFF5555);
-            graphics.drawCenteredString(font, "Press Escape to continue without syncing.", width / 2, height / 2 + 52, 0x888888);
+            renderError(graphics);
         }
 
         super.render(graphics, mouseX, mouseY, partialTick);
+    }
+
+    /**
+     * Draws the failure text wrapped to the screen. These messages routinely embed one or two
+     * absolute paths (or a whole relaunch command line), which as a single centred line runs off
+     * both edges and is unreadable. Truncated on purpose - the full text goes to the log.
+     */
+    private void renderError(GuiGraphics graphics) {
+        int y = height / 2 + 32;
+        int footerY = height - 24;
+        int maxLines = Math.max(1, (footerY - y) / LINE_HEIGHT - 1);
+
+        List<FormattedCharSequence> lines = font.split(
+                Component.literal("Sync failed: " + errorMessage), width - 2 * ERROR_MARGIN);
+        boolean truncated = lines.size() > maxLines;
+        if (truncated) {
+            lines = lines.subList(0, maxLines);
+        }
+        for (FormattedCharSequence line : lines) {
+            graphics.drawCenteredString(font, line, width / 2, y, 0xFFFF5555);
+            y += LINE_HEIGHT;
+        }
+        if (truncated) {
+            graphics.drawCenteredString(font, "(full error in the game log)", width / 2, y, 0xFF888888);
+        }
+        graphics.drawCenteredString(font, "Press Escape to continue without syncing.", width / 2, footerY, 0xFF888888);
     }
 
     @Override

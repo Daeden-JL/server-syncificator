@@ -122,7 +122,10 @@ class SyncSessionIntegrationTest {
         // Simulate the user manually dropping in their own extra mod - never tracked by us.
         Files.writeString(clientModsDir.resolve("user-added.jar"), "not managed", StandardCharsets.UTF_8);
 
-        // Server admin removes mod-b from the pack.
+        // Server admin removes mod-b from the pack. With autoServeModsFolder (the default) the mods
+        // folder *is* the pack, so removing means deleting the jar - dropping it from the config
+        // list alone would leave it on disk and therefore still advertised.
+        Files.delete(serverModsDir.resolve("mod-b.jar"));
         startServer(configWithMods("mod-a.jar"));
 
         SyncEvent.Complete result = new SyncSession(baseUrl(), clientModsDir, managedStatePath, e -> { }).run();
@@ -131,6 +134,33 @@ class SyncSessionIntegrationTest {
         assertTrue(Files.exists(clientModsDir.resolve("mod-a.jar")), "mod-a should remain (still in manifest)");
         assertFalse(Files.exists(clientModsDir.resolve("mod-b.jar")), "mod-b should be deleted (removed from manifest)");
         assertTrue(Files.exists(clientModsDir.resolve("user-added.jar")), "user's own jar must never be touched");
+    }
+
+    @Test
+    void modFileNamesContainingPlusAreServedCorrectly() throws IOException {
+        // Fabric-style versions embed '+' ("forgified-fabric-api-0.116.7+2.2.4+1.21.1.jar"). It
+        // survives URL-encoding as %2B, but a form-encoding decode on the way out turns it back
+        // into a space and the file silently stops existing.
+        String fileName = "forgified-fabric-api-0.116.7+2.2.4+1.21.1.jar";
+        writeServerMod(fileName, "fabric-api-content");
+        startServer(configWithMods(fileName));
+
+        SyncEvent.Complete result = new SyncSession(baseUrl(), clientModsDir, managedStatePath, e -> { }).run();
+
+        assertTrue(result.restartRequired());
+        assertTrue(Files.exists(clientModsDir.resolve(fileName)), "a '+' in the name must not break the download");
+        assertEquals("fabric-api-content", Files.readString(clientModsDir.resolve(fileName)));
+    }
+
+    @Test
+    void modFileNamesContainingSpacesAndPlusAreServedCorrectly() throws IOException {
+        String fileName = "my mod+extra 1.0.jar";
+        writeServerMod(fileName, "spaced");
+        startServer(configWithMods(fileName));
+
+        new SyncSession(baseUrl(), clientModsDir, managedStatePath, e -> { }).run();
+
+        assertEquals("spaced", Files.readString(clientModsDir.resolve(fileName)));
     }
 
     @Test

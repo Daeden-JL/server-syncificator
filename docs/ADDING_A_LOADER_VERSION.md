@@ -30,15 +30,24 @@ two that exist:
 2. Update `build.gradle`: bump the Forge/NeoForge version, the Minecraft version, and (Forge only)
    the Parchment mappings version to match.
 3. Update `mods.toml`/`neoforge.mods.toml`'s Minecraft version range.
-4. Port the four Java classes:
-   - `PluginSync<Loader>.java` - mod entrypoint, wires the mod event bus. Rarely changes between
-     patch versions of the same loader.
-   - `ClientSyncManager.java` - intercepts the title screen. Rarely changes.
+4. Port the six Java classes:
+   - `PluginSync<Loader>.java` - mod entrypoint, wires the mod event bus and registers the
+     config-screen extension point. That extension point is the least portable thing here: Forge
+     1.20.1 uses `ConfigScreenHandler.ConfigScreenFactory` via `ModLoadingContext`, NeoForge 1.21.1
+     uses `IConfigScreenFactory` via the injected `ModContainer`. Expect to rewrite this call.
+   - `ClientSyncManager.java` - intercepts the title screen, and owns the config file path. Rarely
+     changes.
    - `ServerLifecycleHandler.java` - starts the manifest HTTP server on dedicated-server startup.
      Loader/version-independent logic; only the `FMLPaths`/event-class imports change.
    - `SyncProgressScreen.java` - the GUI. This is the one most likely to need real changes if a
      future Minecraft version changes the `Screen`/`GuiGraphics` rendering API (it hasn't changed
      since `GuiGraphics` was introduced in 1.20, so 1.20.x-1.21.x should all be near-identical).
+   - `SyncStatusOverlay.java` - draws the bottom-right title-screen status line from
+     `SyncStatus`. Same `GuiGraphics` caveat as above; it also hardcodes an offset that assumes
+     vanilla draws its copyright line at `height - 10`, so check that if a version moves it.
+   - `ClientConfigScreen.java` - the in-game config GUI. Mostly portable, with one known
+     difference: on 1.20.1 `render` must call `renderBackground` itself, while on 1.21.x
+     `Screen.render` already does it (calling it twice draws the dimmer twice).
 5. Add `include("loader:<loader>-<mc-version>")` to `settings.gradle.kts`.
 
 None of this touches `sync-core`, the wire protocol, or the test suite - a new loader module is

@@ -8,7 +8,6 @@ import dev.pluginsync.core.model.SyncManifest;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
-import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -29,12 +28,12 @@ public final class ManifestHttpServer implements AutoCloseable {
         this.modsDir = modsDir.toAbsolutePath().normalize();
         this.httpServer = HttpServer.create(new InetSocketAddress(bindAddress, port), 0);
         this.httpServer.setExecutor(Executors.newCachedThreadPool(runnable -> {
-            Thread thread = new Thread(runnable, "plugin-sync-http");
+            Thread thread = new Thread(runnable, "daedens-server-syncificator-http");
             thread.setDaemon(true);
             return thread;
         }));
-        this.httpServer.createContext("/plugin-sync/v1/manifest", exchange -> handleManifest(exchange, manifestSupplier));
-        this.httpServer.createContext("/plugin-sync/v1/files/", this::handleFile);
+        this.httpServer.createContext("/daedens-server-syncificator/v1/manifest", exchange -> handleManifest(exchange, manifestSupplier));
+        this.httpServer.createContext("/daedens-server-syncificator/v1/files/", this::handleFile);
     }
 
     public void start() {
@@ -50,7 +49,7 @@ public final class ManifestHttpServer implements AutoCloseable {
         return httpServer.getAddress().getPort();
     }
 
-    private static final String FILES_CONTEXT_PREFIX = "/plugin-sync/v1/files/";
+    private static final String FILES_CONTEXT_PREFIX = "/daedens-server-syncificator/v1/files/";
 
     private void handleManifest(HttpExchange exchange, Supplier<SyncManifest> manifestSupplier) throws IOException {
         if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
@@ -79,13 +78,17 @@ public final class ManifestHttpServer implements AutoCloseable {
             return;
         }
 
+        // getPath() has already percent-decoded the URI, so this must NOT be decoded again:
+        // URLDecoder applies form-encoding rules, where '+' means space - which silently rewrote
+        // "fabric-api-0.116.7+2.2.4.jar" to "fabric-api-0.116.7 2.2.4.jar" and 404'd every mod
+        // whose version string contains a '+'. Decoding twice is also how %252F sneaks a '/' past
+        // a traversal check, though the guards below are what actually stop that.
         String path = exchange.getRequestURI().getPath();
         if (!path.startsWith(FILES_CONTEXT_PREFIX)) {
             sendError(exchange, 400, "Bad Request");
             return;
         }
-        String rawName = path.substring(FILES_CONTEXT_PREFIX.length());
-        String fileName = URLDecoder.decode(rawName, StandardCharsets.UTF_8);
+        String fileName = path.substring(FILES_CONTEXT_PREFIX.length());
 
         // Reject anything that isn't a bare *.jar file name - no traversal, no subdirectories, and
         // nothing else in the mods folder is ever exposed through this endpoint.

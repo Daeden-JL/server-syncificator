@@ -7,7 +7,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /** Scans a directory for jar files and computes their SHA-256 hashes. */
@@ -38,6 +41,27 @@ public final class ModsFolderScanner {
             }
         }
         return result;
+    }
+
+    /**
+     * Lists {@code *.jar} file names in {@code dir}, sorted, without hashing anything. For callers
+     * that only need to know which mods exist - hashing a whole modpack just to read its file names
+     * is a lot of I/O for nothing. Returns an empty list if the directory does not exist.
+     */
+    public static List<String> listJarNames(Path dir) throws IOException {
+        List<String> names = new ArrayList<>();
+        if (!Files.isDirectory(dir)) {
+            return names;
+        }
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(dir, "*.jar")) {
+            for (Path file : stream) {
+                if (Files.isRegularFile(file)) {
+                    names.add(file.getFileName().toString());
+                }
+            }
+        }
+        Collections.sort(names);
+        return names;
     }
 
     public static String sha256Hex(Path file) throws IOException {

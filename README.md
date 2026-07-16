@@ -36,17 +36,36 @@ see [docs/ADDING_A_LOADER_VERSION.md](docs/ADDING_A_LOADER_VERSION.md).
 
 ## Quick start
 
-1. **Server**: drop the built `pluginsync-forge-1.20.1.jar` (or `-neoforge-1.21.1.jar`) into the
-   server's `mods` folder and start it once. It writes `config/pluginsync-server.json` and then
-   refuses to actually start serving until you fill in `publicHost` and list the mods clients
-   should get - see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#server-config) for the format.
+1. **Server**: drop the built `daedens-server-syncificator-forge-1.20.1.jar` (or
+   `-neoforge-1.21.1.jar`) into the server's `mods` folder and start it once. It writes
+   `config/daedens-server-syncificator-server.json` and then refuses to actually start serving
+   until you fill in `publicHost` - see
+   [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#server-config) for the format.
+
+   On every start it rewrites the config's `mods` list to match the jars in the server's `mods`
+   folder, so that file always shows **exactly what clients will be offered**. Adding a mod is just
+   dropping the jar in and restarting; removing one is deleting the jar. Edit an entry to withhold a
+   file (`"side": "SERVER_ONLY"`) or to serve it from Modrinth's CDN - your edits are preserved
+   across restarts.
+
+   The sync endpoint is a plain HTTP server on its own port (`httpPort`, default **25585**) -
+   separate from Minecraft's own port, and configurable in that file. Open/forward it alongside
+   25565.
 2. Restart the server. It now serves a manifest on `http://<publicHost>:<httpPort>/plugin-sync/v1/manifest`.
-3. **Client**: put the matching mod jar in the client's `mods` folder, plus a
-   `config/pluginsync-client.json` pointing `syncBaseUrl` at the server from step 2 (this file is
-   meant to be pre-baked into whatever you hand out as the "client pack" - end users don't write it
-   by hand).
-4. Launch. The client fetches the manifest, downloads whatever's missing/changed, pins the server
-   to the top of the multiplayer list, and restarts once to apply the change.
+3. **Client**: put the matching mod jar in the client's `mods` folder and launch once. The mod
+   writes `config/daedens-server-syncificator-client.json` and stays idle until you point it at a
+   server, either by editing that file or in-game via **Mods > Daeden's Server Syncificator >
+   Config**:
+
+   ```json
+   { "serverHost": "play.example.com", "syncPort": 25585, "minecraftPort": 25565 }
+   ```
+
+   `syncPort` must match the server's `httpPort` from step 1. (For a distributed "client pack" you
+   can still pre-bake this file so end users never see it.)
+4. Launch again. The client fetches the manifest, downloads whatever's missing/changed, pins the
+   server to the top of the multiplayer list, and restarts once to apply the change. The main menu
+   shows the sync result in the bottom-right corner.
 
 ## Repository layout
 

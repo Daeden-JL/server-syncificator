@@ -34,7 +34,7 @@ public final class ManifestHttpClient {
     }
 
     /**
-     * Fetches the manifest from {@code baseUrl + "/plugin-sync/v1/manifest"}.
+     * Fetches the manifest from {@code baseUrl + "/daedens-server-syncificator/v1/manifest"}.
      *
      * @throws IncompatibleProtocolException if the server speaks a manifest protocol version this
      *     client doesn't understand - callers should surface this as "server plugin is newer/older,
@@ -42,7 +42,7 @@ public final class ManifestHttpClient {
      */
     public SyncManifest fetch(String baseUrl) throws IOException {
         String url = (baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl)
-                + "/plugin-sync/v1/manifest";
+                + "/daedens-server-syncificator/v1/manifest";
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))

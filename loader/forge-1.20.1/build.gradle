@@ -14,7 +14,7 @@ version = '0.1.0'
 group = 'dev.pluginsync.loader.forge'
 
 base {
-    archivesName = 'pluginsync-forge-1.20.1'
+    archivesName = 'daedens-server-syncificator-forge-1.20.1'
 }
 
 java.toolchain.languageVersion = JavaLanguageVersion.of(17)
@@ -28,7 +28,7 @@ minecraft {
             property 'forge.logging.markers', 'REGISTRIES'
             property 'forge.logging.console.level', 'debug'
             mods {
-                pluginsync {
+                daedens_server_syncificator {
                     source sourceSets.main
                 }
             }
@@ -38,7 +38,7 @@ minecraft {
             property 'forge.logging.markers', 'REGISTRIES'
             property 'forge.logging.console.level', 'debug'
             mods {
-                pluginsync {
+                daedens_server_syncificator {
                     source sourceSets.main
                 }
             }
@@ -54,4 +54,17 @@ dependencies {
 // Gson ships with Minecraft/Forge itself at runtime - don't shade a second copy into the mod jar.
 configurations.implementation {
     exclude group: 'com.google.code.gson', module: 'gson'
+}
+
+// `implementation project(':sync-core')` only puts sync-core on the compile/dev-run classpath - it
+// does not package it. Without this, the shipped jar loads (its mods.toml is valid) and then dies
+// with NoClassDefFoundError on the first dev.pluginsync.core.* reference, while `runClient` works
+// fine because Gradle puts sync-core on the classpath there. Fold the classes into the mod jar.
+// evaluationDependsOn: the root build sets org.gradle.configureondemand, so :sync-core isn't
+// guaranteed to be configured when this file is evaluated - without this its sourceSets resolve
+// to nothing and the `from` below silently contributes zero classes.
+evaluationDependsOn(':sync-core')
+
+jar {
+    from project(':sync-core').sourceSets.main.output
 }

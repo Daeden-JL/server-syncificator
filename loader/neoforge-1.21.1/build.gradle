@@ -12,7 +12,7 @@ version = '0.1.0'
 group = 'dev.pluginsync.loader.neoforge'
 
 base {
-    archivesName = 'pluginsync-neoforge-1.21.1'
+    archivesName = 'daedens-server-syncificator-neoforge-1.21.1'
 }
 
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
@@ -22,7 +22,7 @@ neoForge {
     // normal Gradle dependency, so a "+"/range version doesn't work here - it needs a concrete
     // build number. Pinned to match the target test server (SnowGlobe, running 21.1.233).
     // Override locally with -PneoForgeVersion=... if you need to build against a different build.
-    version = project.findProperty('neoForgeVersion') ?: '21.1.233'
+    version = project.findProperty('neoForgeVersion') ?: '21.1.238'
 
     parchment {
         minecraftVersion = "1.21.1"
@@ -39,7 +39,7 @@ neoForge {
     }
 
     mods {
-        pluginsync {
+        daedens_server_syncificator {
             sourceSet sourceSets.main
         }
     }
@@ -47,9 +47,30 @@ neoForge {
 
 dependencies {
     implementation project(':sync-core')
+    // `implementation` alone doesn't reach the generated run classpath, so dev runs would fail with
+    // NoClassDefFoundError on dev.pluginsync.core.* even though the shipped jar bundles it below.
+    // The gson exclusion is per-dependency on purpose: sync-core asks for 2.11.0 while Minecraft
+    // pins it 'strictly 2.10.1' (unresolvable), but excluding gson from the whole configuration
+    // strips Minecraft's own copy and the launcher then dies on GsonBuilder before mods load.
+    additionalRuntimeClasspath(project(':sync-core')) {
+        exclude group: 'com.google.code.gson', module: 'gson'
+    }
 }
 
 // Gson ships with Minecraft/NeoForge itself at runtime - don't shade a second copy into the mod jar.
 configurations.implementation {
     exclude group: 'com.google.code.gson', module: 'gson'
+}
+
+// `implementation project(':sync-core')` only puts sync-core on the compile/dev-run classpath - it
+// does not package it. Without this, the shipped jar loads (its neoforge.mods.toml is valid) and
+// then dies with NoClassDefFoundError on the first dev.pluginsync.core.* reference, while
+// `runClient` works fine because Gradle puts sync-core on the classpath there.
+// evaluationDependsOn: the root build sets org.gradle.configureondemand, so :sync-core isn't
+// guaranteed to be configured when this file is evaluated - without this its sourceSets resolve
+// to nothing and the `from` below silently contributes zero classes.
+evaluationDependsOn(':sync-core')
+
+jar {
+    from project(':sync-core').sourceSets.main.output
 }

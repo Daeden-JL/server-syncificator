@@ -9,7 +9,7 @@ pluginManagement {
     }
 }
 
-rootProject.name = "plugin-sync"
+rootProject.name = "daedens-server-syncificator"
 
 include("sync-core")
 

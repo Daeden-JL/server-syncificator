@@ -4,20 +4,20 @@ license = "MIT"
 issueTrackerURL = "https://github.com/daeden-jl/plugin-sync/issues"
 
 [[mods]]
-modId = "pluginsync"
+modId = "daedens_server_syncificator"
 version = "${file.jarVersion}"
-displayName = "Plugin Sync"
+displayName = "Daeden's Server Syncificator"
 authors = "Plugin Sync Contributors"
 description = '''Keeps a client's mods folder in sync with a configured server before it connects, downloading changes from Modrinth or directly from the server and restarting to apply them.'''
 
-[[dependencies.pluginsync]]
+[[dependencies.daedens_server_syncificator]]
     modId = "forge"
     mandatory = true
     versionRange = "[47,)"
     ordering = "NONE"
     side = "BOTH"
 
-[[dependencies.pluginsync]]
+[[dependencies.daedens_server_syncificator]]
     modId = "minecraft"
     mandatory = true
     versionRange = "[1.20.1,1.20.2)"
