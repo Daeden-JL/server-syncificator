@@ -5,10 +5,12 @@ import dev.pluginsync.core.json.JsonCodec;
 import dev.pluginsync.core.model.ManagedState;
 import dev.pluginsync.core.model.ModEntry;
 import dev.pluginsync.core.model.SyncManifest;
+import dev.pluginsync.core.relaunch.PendingOperations;
 import dev.pluginsync.core.scan.ModsFolderScanner;
 import dev.pluginsync.core.scan.ModsFolderScanner.ScannedFile;
 
 import java.io.IOException;
+import java.nio.file.AccessDeniedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
@@ -21,13 +23,19 @@ import java.util.function.Consumer;
  * loader-specific GUI screen can render progress.
  *
  * <p>Intentionally has no knowledge of Minecraft, Forge, or NeoForge - callers decide what to do
- * with a {@link SyncEvent.Complete#restartRequired()} result (typically: relaunch the client).
+ * with a {@link SyncEvent.Complete#restartRequired()} result (typically: relaunch the client). If
+ * {@link #pendingOperationsPath()} exists after {@link #run()} returns, some files couldn't be
+ * updated/removed immediately because they were locked by this JVM (on Windows: any mod jar the
+ * loader already has open this session, not just a race) - the caller must relaunch via
+ * {@code RelaunchHelper.relaunchWithPendingOperations(...)} rather than a plain relaunch, so those
+ * changes get applied once this JVM has actually exited.
  */
 public final class SyncSession {
 
     private final String baseUrl;
     private final Path modsDir;
     private final Path managedStatePath;
+    private final Path pendingOperationsPath;
     private final ManifestHttpClient manifestClient;
     private final Downloader downloader;
     private final Consumer<SyncEvent> listener;
@@ -46,9 +54,15 @@ public final class SyncSession {
         this.baseUrl = baseUrl;
         this.modsDir = modsDir;
         this.managedStatePath = managedStatePath;
+        this.pendingOperationsPath = managedStatePath.resolveSibling("daedens-server-syncificator-pending.json");
         this.manifestClient = manifestClient;
         this.downloader = downloader;
         this.listener = listener;
+    }
+
+    /** Where a pending-operations file would be written, if any files couldn't be applied immediately. */
+    public Path pendingOperationsPath() {
+        return pendingOperationsPath;
     }
 
     /**
@@ -70,6 +84,7 @@ public final class SyncSession {
             return finish(state, false);
         }
 
+        PendingOperations pendingOperations = new PendingOperations();
         int totalFiles = plan.toDelete().size() + plan.toDownload().size();
         int index = 0;
 
@@ -78,6 +93,11 @@ public final class SyncSession {
             listener.accept(new SyncEvent.Deleting(fileName, index, totalFiles));
             try {
                 Files.deleteIfExists(modsDir.resolve(fileName));
+            } catch (AccessDeniedException lockedException) {
+                // Currently loaded by this JVM (on Windows: true of every already-installed mod
+                // jar for the life of the session) - defer the removal to the post-relaunch
+                // trampoline rather than failing the whole sync.
+                pendingOperations.deletes().add(modsDir.resolve(fileName).toString());
             } catch (IOException e) {
                 listener.accept(new SyncEvent.Failed("Failed to remove " + fileName + ": " + e.getMessage(), e));
                 throw e;
@@ -88,14 +108,23 @@ public final class SyncSession {
         for (ModEntry entry : plan.toDownload()) {
             index++;
             final int currentIndex = index;
+            Downloader.Outcome outcome;
             try {
-                downloader.download(entry, modsDir, (downloaded, total) -> listener.accept(
+                outcome = downloader.download(entry, modsDir, (downloaded, total) -> listener.accept(
                         new SyncEvent.Downloading(entry.fileName(), downloaded, total, currentIndex, totalFiles)));
             } catch (IOException e) {
                 listener.accept(new SyncEvent.Failed("Failed to download " + entry.fileName() + ": " + e.getMessage(), e));
                 throw e;
             }
+            if (outcome instanceof Downloader.Outcome.Deferred deferred) {
+                pendingOperations.renames().add(
+                        new PendingOperations.Rename(deferred.deferredPath().toString(), deferred.finalPath().toString()));
+            }
             state.managedFiles().put(entry.fileName(), entry.sha256());
+        }
+
+        if (!pendingOperations.isEmpty()) {
+            JsonCodec.writeFile(pendingOperationsPath, pendingOperations);
         }
 
         return finish(state, true);

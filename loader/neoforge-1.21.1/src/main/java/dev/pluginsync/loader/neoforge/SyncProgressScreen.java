@@ -1,6 +1,8 @@
 package dev.pluginsync.loader.neoforge;
 
 import dev.pluginsync.core.config.ClientConfig;
+import dev.pluginsync.core.json.JsonCodec;
+import dev.pluginsync.core.relaunch.PendingOperations;
 import dev.pluginsync.core.relaunch.RelaunchHelper;
 import dev.pluginsync.core.serverlist.ServersDatEditor;
 import dev.pluginsync.core.sync.SyncEvent;
@@ -14,6 +16,7 @@ import net.minecraft.util.FormattedCharSequence;
 import net.neoforged.fml.loading.FMLPaths;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -79,7 +82,7 @@ public final class SyncProgressScreen extends Screen {
             pinServerToList();
 
             if (result.restartRequired() && config.autoRestart()) {
-                relaunchAndExit();
+                relaunchAndExit(session.pendingOperationsPath());
             } else {
                 SyncStatus.set(result.restartRequired()
                         ? SyncStatus.State.RESTART_REQUIRED
@@ -112,9 +115,18 @@ public final class SyncProgressScreen extends Screen {
         }
     }
 
-    private void relaunchAndExit() {
+    private void relaunchAndExit(Path pendingOperationsPath) {
         try {
-            RelaunchHelper.relaunch();
+            if (Files.isRegularFile(pendingOperationsPath)) {
+                // Some files couldn't be updated/removed immediately because this JVM already had
+                // them locked (on Windows: true of every already-installed mod jar for the life of
+                // the session, not just from a race) - relaunch via a small detached helper that
+                // waits for this process to actually exit before applying them.
+                PendingOperations pending = JsonCodec.readFile(pendingOperationsPath, PendingOperations.class);
+                RelaunchHelper.relaunchWithPendingOperations(pending);
+            } else {
+                RelaunchHelper.relaunch();
+            }
             relaunchTriggered = true;
             statusLine.set("Restarting to apply changes...");
             if (minecraft != null) {

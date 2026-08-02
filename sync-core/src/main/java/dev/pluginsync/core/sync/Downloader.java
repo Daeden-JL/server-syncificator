@@ -9,6 +9,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.file.AccessDeniedException;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -21,7 +22,7 @@ import java.time.Duration;
  * Downloads a single {@link ModEntry}, trying each of its URLs in priority order (external CDN
  * first, direct-from-server fallback last) until one succeeds and hashes to the expected sha256.
  */
-public final class Downloader {
+public class Downloader {
 
     /** Attempts per URL before moving on to the next candidate. */
     private static final int ATTEMPTS_PER_URL = 2;
@@ -32,6 +33,16 @@ public final class Downloader {
         void onProgress(long bytesDownloaded, long totalBytes);
     }
 
+    /** Whether the downloaded file was applied immediately, or deferred because the target was locked. */
+    public sealed interface Outcome {
+        record Applied() implements Outcome {
+        }
+
+        /** {@code deferredPath} holds the verified bytes; the caller must arrange to move it into {@code finalPath} later. */
+        record Deferred(Path deferredPath, Path finalPath) implements Outcome {
+        }
+    }
+
     public Downloader() {
         this(HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).followRedirects(HttpClient.Redirect.NORMAL).build());
     }
@@ -40,8 +51,16 @@ public final class Downloader {
         this.httpClient = httpClient;
     }
 
-    /** Downloads {@code entry} into {@code destDir}, replacing any existing file of the same name. */
-    public void download(ModEntry entry, Path destDir, ProgressListener progressListener) throws IOException {
+    /**
+     * Downloads {@code entry} into {@code destDir}, replacing any existing file of the same name.
+     *
+     * <p>If the target already exists and is currently locked by this JVM (on Windows: every mod
+     * jar the loader has open this session, for as long as the JVM runs - not just a race) the
+     * verified download is kept under a {@code .psync-pending} name and {@link Outcome.Deferred}
+     * is returned instead of throwing. The caller is expected to queue the actual move for after
+     * this JVM exits (see {@code RelaunchHelper.relaunchWithPendingOperations}).
+     */
+    public Outcome download(ModEntry entry, Path destDir, ProgressListener progressListener) throws IOException {
         Files.createDirectories(destDir);
         Path finalPath = destDir.resolve(entry.fileName());
         Path tempPath = destDir.resolve(entry.fileName() + ".psync-tmp");
@@ -55,8 +74,14 @@ public final class Downloader {
                         throw new IOException("Hash mismatch downloading " + entry.fileName() + " from " + url
                                 + " (expected " + entry.sha256() + ", got " + actualHash + ")");
                     }
-                    moveIntoPlace(tempPath, finalPath);
-                    return;
+                    try {
+                        moveIntoPlace(tempPath, finalPath);
+                        return new Outcome.Applied();
+                    } catch (AccessDeniedException lockedException) {
+                        Path deferredPath = destDir.resolve(entry.fileName() + ".psync-pending");
+                        Files.move(tempPath, deferredPath, StandardCopyOption.REPLACE_EXISTING);
+                        return new Outcome.Deferred(deferredPath, finalPath);
+                    }
                 } catch (IOException e) {
                     lastFailure = e;
                     Files.deleteIfExists(tempPath);
