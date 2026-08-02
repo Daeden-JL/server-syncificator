@@ -4,6 +4,7 @@ import dev.pluginsync.core.config.ClientConfig;
 import dev.pluginsync.core.json.JsonCodec;
 import dev.pluginsync.core.relaunch.PendingOperations;
 import dev.pluginsync.core.relaunch.RelaunchHelper;
+import dev.pluginsync.core.relaunch.RelaunchOutcome;
 import dev.pluginsync.core.serverlist.ServersDatEditor;
 import dev.pluginsync.core.sync.SyncEvent;
 import dev.pluginsync.core.sync.SyncSession;
@@ -117,26 +118,45 @@ public final class SyncProgressScreen extends Screen {
 
     private void relaunchAndExit(Path pendingOperationsPath) {
         try {
+            boolean autoRelaunch;
             if (Files.isRegularFile(pendingOperationsPath)) {
                 // Some files couldn't be updated/removed immediately because this JVM already had
                 // them locked (on Windows: true of every already-installed mod jar for the life of
-                // the session, not just from a race) - relaunch via a small detached helper that
-                // waits for this process to actually exit before applying them.
+                // the session, not just from a race). This launches a detached helper that waits
+                // for this process to actually exit before applying them - that part doesn't
+                // depend on being able to relaunch Minecraft afterward, which is why it can still
+                // run even where relaunching can't.
                 PendingOperations pending = JsonCodec.readFile(pendingOperationsPath, PendingOperations.class);
-                RelaunchHelper.relaunchWithPendingOperations(pending);
+                RelaunchOutcome outcome = RelaunchHelper.relaunchWithPendingOperations(pending);
+                autoRelaunch = outcome instanceof RelaunchOutcome.Relaunched;
             } else {
                 RelaunchHelper.relaunch();
+                autoRelaunch = true;
             }
-            relaunchTriggered = true;
-            statusLine.set("Restarting to apply changes...");
-            if (minecraft != null) {
-                minecraft.execute(() -> minecraft.stop());
+
+            if (autoRelaunch) {
+                relaunchTriggered = true;
+                statusLine.set("Restarting to apply changes...");
+                if (minecraft != null) {
+                    minecraft.execute(() -> minecraft.stop());
+                }
+            } else {
+                // Not a failure - the sync itself worked and the pending changes are staged with a
+                // helper waiting to apply them. Windows never exposes the launch command at all
+                // (ProcessHandle.arguments() is empty there), so it can't restart Minecraft
+                // automatically, but closing the game normally is enough for the helper to finish.
+                restartNeeded = true;
+                statusLine.set("Mods updated - restart to apply");
+                SyncStatus.set(SyncStatus.State.RESTART_REQUIRED, "automatic restart unavailable");
+                LOGGER.log(Level.INFO, "Daeden's Server Syncificator: mods are updated and a helper is "
+                        + "waiting to apply them once you close the game, but this platform won't let it "
+                        + "restart automatically - restart manually to apply them.");
+                finished = true;
             }
         } catch (IOException e) {
-            // Not a failure - the sync itself worked and the mods folder is already updated, only
-            // the convenience restart didn't happen. Windows never exposes the launch command at
-            // all (ProcessHandle.arguments() is empty there), so this is the normal path on that
-            // platform rather than something going wrong; saying "sync failed" would be a lie.
+            // Reached only when there was nothing pending and the plain relaunch() failed, or the
+            // helper process itself couldn't be started - a genuine "can't restart" case distinct
+            // from the platform-can't-auto-relaunch case above.
             restartNeeded = true;
             statusLine.set("Mods updated - restart to apply");
             SyncStatus.set(SyncStatus.State.RESTART_REQUIRED, "automatic restart unavailable");

@@ -65,6 +65,33 @@ class RelaunchHelperPosixScriptTest {
         assertTrue(Files.exists(markerFile), "relaunch command never ran");
     }
 
+    @Test
+    void appliesOperationsEvenWithoutARelaunchCommand(@TempDir Path tempDir) throws IOException, InterruptedException {
+        // Regression test: on Windows, ProcessHandle.Info.arguments() is always empty, so
+        // RelaunchHelper.relaunchWithPendingOperations() must still apply staged file operations
+        // via the trampoline even when it can't reconstruct a relaunch command (null here stands
+        // in for that case) - it must not skip applying the operations just because it can't also
+        // restart Minecraft afterward.
+        Path pendingFile = tempDir.resolve("mod.jar.psync-pending");
+        Path finalFile = tempDir.resolve("mod.jar");
+
+        Files.writeString(pendingFile, "new-content");
+
+        Process stillRunning = new ProcessBuilder("sleep", "1").start();
+
+        PendingOperations operations = new PendingOperations();
+        operations.renames().add(new PendingOperations.Rename(pendingFile.toString(), finalFile.toString()));
+
+        Path scriptPath = RelaunchHelper.writePosixScript(stillRunning.pid(), operations, null);
+        Process script = new ProcessBuilder("/bin/sh", scriptPath.toString()).start();
+
+        boolean scriptFinished = script.waitFor(15, TimeUnit.SECONDS);
+        assertTrue(scriptFinished, "trampoline script did not finish in time");
+
+        assertTrue(Files.exists(finalFile), "rename was not applied even though no relaunch command was available");
+        assertEquals("new-content", Files.readString(finalFile));
+    }
+
     private static void waitUntil(java.util.function.BooleanSupplier condition, long timeoutMillis) throws InterruptedException {
         long deadline = System.currentTimeMillis() + timeoutMillis;
         while (!condition.getAsBoolean() && System.currentTimeMillis() < deadline) {

@@ -61,15 +61,18 @@ public final class RelaunchHelper {
      * until that JVM actually exits.
      *
      * <p>Instead of starting Minecraft directly, this generates and launches a small detached
-     * script that waits for the current process to exit, applies the pending file operations, and
-     * only then starts Minecraft - since the rename/delete genuinely cannot happen from inside
-     * this still-running JVM. Like {@link #relaunch()}, this is unavailable on Windows if the
-     * launch command line itself isn't exposed by the platform; unlike {@link #relaunch()}, the
-     * mods folder update is only *staged* until this succeeds, so a caller that can't relaunch at
-     * all here must still tell the player to fully close and reopen the game.
+     * script that waits for the current process to exit and then applies the pending file
+     * operations - since the rename/delete genuinely cannot happen from inside this still-running
+     * JVM. Applying those operations does not depend on being able to relaunch Minecraft
+     * afterward: on Windows the launch command line is never exposed
+     * ({@link ProcessHandle.Info#arguments()} is always empty there), so the script still gets
+     * generated and launched to apply the pending operations, it just omits the final relaunch
+     * step. Callers must check the returned {@link RelaunchOutcome} to know whether they can
+     * expect Minecraft to come back up on its own or need to tell the player to close and reopen
+     * the game themselves.
      */
-    public static Process relaunchWithPendingOperations(PendingOperations operations) throws IOException {
-        List<String> relaunchCommand = buildRelaunchCommand();
+    public static RelaunchOutcome relaunchWithPendingOperations(PendingOperations operations) throws IOException {
+        List<String> relaunchCommand = tryBuildRelaunchCommand();
         long currentPid = ProcessHandle.current().pid();
 
         Path scriptPath = WINDOWS
@@ -82,7 +85,20 @@ public final class RelaunchHelper {
 
         ProcessBuilder builder = new ProcessBuilder(scriptCommand);
         builder.directory(Path.of(System.getProperty("user.dir")).toFile());
-        return builder.start();
+        Process process = builder.start();
+
+        return relaunchCommand != null
+                ? new RelaunchOutcome.Relaunched(process)
+                : new RelaunchOutcome.ApplyScheduledOnly(process);
+    }
+
+    /** Same as {@link #buildRelaunchCommand()}, but reports unavailability via {@code null} instead of throwing. */
+    private static List<String> tryBuildRelaunchCommand() {
+        try {
+            return buildRelaunchCommand();
+        } catch (IOException e) {
+            return null;
+        }
     }
 
     private static List<String> buildRelaunchCommand() throws IOException {
@@ -127,7 +143,9 @@ public final class RelaunchHelper {
         }
         script.append("    timeout /t 1 /nobreak >nul\r\n");
         script.append(")\r\n");
-        script.append("start \"\" ").append(windowsQuoteAll(relaunchCommand)).append("\r\n");
+        if (relaunchCommand != null) {
+            script.append("start \"\" ").append(windowsQuoteAll(relaunchCommand)).append("\r\n");
+        }
 
         Path scriptPath = Files.createTempFile("pluginsync-relaunch-", ".bat");
         Files.writeString(scriptPath, script.toString());
@@ -162,7 +180,9 @@ public final class RelaunchHelper {
         script.append("  sleep 1\n");
         script.append("  i=$((i + 1))\n");
         script.append("done\n");
-        script.append("nohup").append(posixQuoteAll(relaunchCommand)).append(" >/dev/null 2>&1 &\n");
+        if (relaunchCommand != null) {
+            script.append("nohup").append(posixQuoteAll(relaunchCommand)).append(" >/dev/null 2>&1 &\n");
+        }
 
         Path scriptPath = Files.createTempFile("pluginsync-relaunch-", ".sh");
         Files.writeString(scriptPath, script.toString());
