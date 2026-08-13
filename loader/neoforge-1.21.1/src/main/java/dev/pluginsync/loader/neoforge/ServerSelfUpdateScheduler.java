@@ -44,7 +44,6 @@ final class ServerSelfUpdateScheduler {
                     + "version - self-update checks are disabled this session.");
             return;
         }
-        Path currentJarPath = modsDir.resolve(JAR_NAME_PREFIX + currentVersion + ".jar");
         // Logged unconditionally (not just on a found update) so a wrongly-resolved version -
         // e.g. if the jar manifest ever stops carrying Implementation-Version again - shows up
         // immediately in the log, instead of manifesting only as an endless redundant re-download.
@@ -52,19 +51,19 @@ final class ServerSelfUpdateScheduler {
 
         ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor(daemonThreadFactory());
         executor.scheduleAtFixedRate(
-                () -> checkOnce(currentVersion, modsDir, currentJarPath), 0, CHECK_INTERVAL_HOURS, TimeUnit.HOURS);
+                () -> checkOnce(currentVersion, modsDir), 0, CHECK_INTERVAL_HOURS, TimeUnit.HOURS);
     }
 
-    private static void checkOnce(String currentVersion, Path modsDir, Path currentJarPath) {
+    private static void checkOnce(String currentVersion, Path modsDir) {
         try {
             SelfUpdateSession.Result result = new SelfUpdateSession(new SelfUpdateChecker(GITHUB_OWNER, GITHUB_REPO))
-                    .run(currentVersion, JAR_NAME_PREFIX, modsDir, currentJarPath);
+                    .run(currentVersion, JAR_NAME_PREFIX, modsDir);
 
             if (result instanceof SelfUpdateSession.Result.Updated updated) {
                 LOGGER.info("Daeden's Server Syncificator: downloaded v" + updated.newVersion() + " - "
                         + (updated.pendingDelete()
-                                ? "the old jar is queued for removal once this server process exits; "
-                                : "the old jar has already been removed; ")
+                                ? "stale jar(s) are queued for removal once this server process exits; "
+                                : "stale jar(s) have already been removed; ")
                         + "restart the server to run the new version.");
             }
         } catch (IOException e) {

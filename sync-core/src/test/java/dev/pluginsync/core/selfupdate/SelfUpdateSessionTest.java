@@ -77,7 +77,7 @@ class SelfUpdateSessionTest {
         String baseUrl = start("new-version-content");
         SelfUpdateSession session = new SelfUpdateSession(new SelfUpdateChecker(baseUrl));
 
-        SelfUpdateSession.Result result = session.run("0.1.4", JAR_PREFIX, modsDir, oldJarPath);
+        SelfUpdateSession.Result result = session.run("0.1.4", JAR_PREFIX, modsDir);
 
         assertTrue(result instanceof SelfUpdateSession.Result.Updated);
         SelfUpdateSession.Result.Updated updated = (SelfUpdateSession.Result.Updated) result;
@@ -100,9 +100,37 @@ class SelfUpdateSessionTest {
         SelfUpdateSession session = new SelfUpdateSession(new SelfUpdateChecker(baseUrl));
 
         // Already running the version the fake release advertises - nothing to do.
-        SelfUpdateSession.Result result = session.run("0.1.5", JAR_PREFIX, modsDir, currentJarPath);
+        SelfUpdateSession.Result result = session.run("0.1.5", JAR_PREFIX, modsDir);
 
         assertTrue(result instanceof SelfUpdateSession.Result.UpToDate);
         assertTrue(Files.exists(currentJarPath), "nothing should have been touched");
+    }
+
+    @Test
+    void sweepsAwayEveryStaleJarNotJustTheExpectedOne(@TempDir Path modsDir) throws IOException {
+        // Regression test: observed on a real server updating 0.1.5 -> 0.1.6, where 0.1.5's own jar
+        // manifest didn't resolve a version at all, so it went looking for a specific filename that
+        // was never going to exist and left its real jar behind. Cleanup must not depend on
+        // correctly guessing the one "current" filename - it should catch every stray copy of this
+        // mod under this loader's prefix, including ones a caller's reported "current version"
+        // wouldn't even point at.
+        Path staleA = modsDir.resolve(JAR_PREFIX + "0.1.3.jar");
+        Path staleB = modsDir.resolve(JAR_PREFIX + "0.0NONE.jar");
+        Files.writeString(staleA, "stale-a", StandardCharsets.UTF_8);
+        Files.writeString(staleB, "stale-b", StandardCharsets.UTF_8);
+        Files.writeString(modsDir.resolve("unrelated-mod-1.0.jar"), "leave me alone", StandardCharsets.UTF_8);
+
+        String baseUrl = start("new-version-content");
+        SelfUpdateSession session = new SelfUpdateSession(new SelfUpdateChecker(baseUrl));
+
+        // The caller's "current version" doesn't match either stale file's embedded version - that
+        // must not stop them from being cleaned up.
+        SelfUpdateSession.Result result = session.run("0.0NONE", JAR_PREFIX, modsDir);
+
+        assertTrue(result instanceof SelfUpdateSession.Result.Updated);
+        assertFalse(Files.exists(staleA), "every stale copy of this mod should be swept, not just one");
+        assertFalse(Files.exists(staleB), "every stale copy of this mod should be swept, not just one");
+        assertTrue(Files.exists(modsDir.resolve("unrelated-mod-1.0.jar")), "unrelated jars must never be touched");
+        assertTrue(Files.exists(modsDir.resolve(JAR_PREFIX + "0.1.5.jar")), "new jar should be present");
     }
 }
