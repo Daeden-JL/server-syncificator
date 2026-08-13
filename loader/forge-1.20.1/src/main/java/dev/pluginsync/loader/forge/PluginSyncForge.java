@@ -9,9 +9,9 @@ import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 /**
  * Mod entrypoint. Client and dedicated-server setup are wired through the mod event bus so that
  * client-only classes (Screen, GuiGraphics, ...) are never loaded on a dedicated server: the
- * {@code FMLClientSetupEvent} handler - the only place {@link ClientSyncManager} and
- * {@link SyncStatusOverlay} are referenced - is guaranteed by Forge to only fire on the client
- * physical side.
+ * {@code FMLClientSetupEvent} handler - the only place {@link ClientSyncManager},
+ * {@link SyncStatusOverlay} and {@link TitleScreenSyncButton} are referenced - is guaranteed by
+ * Forge to only fire on the client physical side.
  */
 @Mod(PluginSyncForge.MOD_ID)
 public final class PluginSyncForge {
@@ -27,6 +27,7 @@ public final class PluginSyncForge {
     private void onClientSetup(FMLClientSetupEvent event) {
         MinecraftForge.EVENT_BUS.register(new ClientSyncManager());
         MinecraftForge.EVENT_BUS.register(new SyncStatusOverlay());
+        MinecraftForge.EVENT_BUS.register(new TitleScreenSyncButton());
 
         // Enables the "Config" button next to this mod in the mods list. Must stay behind a plain
         // method call: a lambda over the screen factory here would put Screen in this class's

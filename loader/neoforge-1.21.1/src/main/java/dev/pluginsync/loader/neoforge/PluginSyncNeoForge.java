@@ -12,8 +12,8 @@ import net.neoforged.neoforge.common.NeoForge;
  * via constructor injection, the current NeoForge 1.21.x convention) so that client-only classes
  * (Screen, GuiGraphics, ...) are never loaded on a dedicated server: the
  * {@code FMLClientSetupEvent} handler - the only place {@link ClientSyncManager},
- * {@link SyncStatusOverlay} and {@link ClientConfigScreen} are referenced - is guaranteed by
- * NeoForge to only fire on the client physical side.
+ * {@link SyncStatusOverlay}, {@link TitleScreenSyncButton} and {@link ClientConfigScreen} are
+ * referenced - is guaranteed by NeoForge to only fire on the client physical side.
  */
 @Mod(PluginSyncNeoForge.MOD_ID)
 public final class PluginSyncNeoForge {
@@ -31,6 +31,7 @@ public final class PluginSyncNeoForge {
     private void onClientSetup(FMLClientSetupEvent event) {
         NeoForge.EVENT_BUS.register(new ClientSyncManager());
         NeoForge.EVENT_BUS.register(new SyncStatusOverlay());
+        NeoForge.EVENT_BUS.register(new TitleScreenSyncButton());
 
         // Enables the "Config" button next to this mod in the mods list. Must stay behind a plain
         // method call: a lambda over IConfigScreenFactory here would put Screen in this class's
