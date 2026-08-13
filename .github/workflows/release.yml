@@ -31,6 +31,16 @@ jobs:
       - name: Build mod jars
         run: ./gradlew build --stacktrace
 
+      - name: Generate checksums
+        # The server's self-updater (SelfUpdateChecker) downloads a jar straight from this release
+        # and needs a hash to verify it against - GitHub's release API doesn't hand back file
+        # hashes itself, so this repo has to publish its own. Only basenames go in, matching the
+        # asset names softprops/action-gh-release publishes below (it drops the directory part too).
+        run: |
+          : > checksums.txt
+          (cd loader/forge-1.20.1/build/libs && sha256sum *.jar) >> "$GITHUB_WORKSPACE/checksums.txt"
+          (cd loader/neoforge-1.21.1/build/libs && sha256sum *.jar) >> "$GITHUB_WORKSPACE/checksums.txt"
+
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
@@ -42,3 +52,4 @@ jobs:
           files: |
             loader/forge-1.20.1/build/libs/*.jar
             loader/neoforge-1.21.1/build/libs/*.jar
+            checksums.txt

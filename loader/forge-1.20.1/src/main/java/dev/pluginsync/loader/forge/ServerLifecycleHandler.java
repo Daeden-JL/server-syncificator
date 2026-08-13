@@ -22,7 +22,8 @@ import java.util.logging.Logger;
  * before this server starts handing out download URLs.
  *
  * <p>On every start the config's mod list is reconciled with the mods folder and written back, so
- * the file on disk always names exactly what clients will be offered.
+ * the file on disk always names exactly what clients will be offered. This also starts
+ * {@link ServerSelfUpdateScheduler}, so the mod checks GitHub for - and downloads - its own updates.
  */
 final class ServerLifecycleHandler {
 
@@ -41,6 +42,7 @@ final class ServerLifecycleHandler {
             return;
         }
         reconcileModList(config, modsDir, configPath);
+        ServerSelfUpdateScheduler.start(config, modsDir);
 
         if (config.publicHost().isEmpty()) {
             LOGGER.warning("Daeden's Server Syncificator: 'publicHost' is not set in " + configPath + " - refusing to start "

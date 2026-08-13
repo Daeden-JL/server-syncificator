@@ -89,6 +89,7 @@ codebase doesn't know about) byte-for-byte. If the file can't be parsed, nothing
   "httpBind": "0.0.0.0",
   "publicHost": "play.example.com",
   "autoServeModsFolder": true,
+  "selfUpdateEnabled": true,
   "mods": [
     { "fileName": "jei-1.20.1.jar", "source": "MODRINTH", "modrinthVersionId": "abcdEFGH", "side": "BOTH" },
     { "fileName": "server-admin-tools.jar", "source": "DIRECT", "modrinthVersionId": null, "side": "SERVER_ONLY" }
@@ -137,6 +138,32 @@ The server writes this file with an empty `publicHost` the first time it runs, a
 start serving** until an admin fills it in - clients need a reachable address to download from. See
 `ServerLifecycleHandler`. With `autoServeModsFolder` left at its default, `publicHost` is the only
 field that must be set by hand.
+
+### `selfUpdateEnabled` (default `true`) - the server updates itself
+
+`ServerSelfUpdateScheduler` checks `Daeden-JL/server-syncificator`'s GitHub releases on startup,
+then once a day while the server keeps running (`SelfUpdateChecker`), and - if the latest release
+is newer than the version currently running - downloads the matching loader jar and hash-verifies
+it against a `checksums.txt` published alongside each release (GitHub's release API doesn't hand
+back file hashes itself, so the release workflow generates and publishes one; see
+`.github/workflows/release.yml`).
+
+Because the new jar always lands under a brand-new file name (the version is baked into every
+release's filename, same as always), downloading it never collides with anything on disk. Removing
+the *old* jar is the part that can be blocked: NeoForge/Forge keep every mod jar this JVM has
+loaded open for the process's whole life, so deleting the file this code is presently running from
+can fail on Windows. When that happens the removal is handed to
+`RelaunchHelper#applyOperationsOnExit`, which waits for this JVM to actually exit and then deletes
+it - deliberately not a relaunch of any kind (see `RelaunchOutcome`), since when this server process
+starts again is an admin's decision, not something to act on here. Either way, the update only
+takes effect the next time an admin restarts the server themselves; this never restarts it or kicks
+players on its own.
+
+Once the new jar is sitting in the server's mods folder, it's just another file
+`ServerConfigStore#reconcileWithModsFolder` picks up on the next restart (see above) - clients then
+receive it exactly the way they receive any other mod update, including the same deferred-apply
+handling if their own copy happens to be locked (see "Why a restart is unavoidable" and
+`RelaunchHelper`).
 
 ## Client config (`config/daedens-server-syncificator-client.json`)
 
