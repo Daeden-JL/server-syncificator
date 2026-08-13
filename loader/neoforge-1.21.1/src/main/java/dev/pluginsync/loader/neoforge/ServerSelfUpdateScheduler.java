@@ -45,6 +45,10 @@ final class ServerSelfUpdateScheduler {
             return;
         }
         Path currentJarPath = modsDir.resolve(JAR_NAME_PREFIX + currentVersion + ".jar");
+        // Logged unconditionally (not just on a found update) so a wrongly-resolved version -
+        // e.g. if the jar manifest ever stops carrying Implementation-Version again - shows up
+        // immediately in the log, instead of manifesting only as an endless redundant re-download.
+        LOGGER.info("Daeden's Server Syncificator: self-update checks enabled - this server is v" + currentVersion + ".");
 
         ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor(daemonThreadFactory());
         executor.scheduleAtFixedRate(
