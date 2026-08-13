@@ -149,10 +149,17 @@ back file hashes itself, so the release workflow generates and publishes one; se
 `.github/workflows/release.yml`).
 
 Because the new jar always lands under a brand-new file name (the version is baked into every
-release's filename, same as always), downloading it never collides with anything on disk. Removing
-the *old* jar is the part that can be blocked: NeoForge/Forge keep every mod jar this JVM has
-loaded open for the process's whole life, so deleting the file this code is presently running from
-can fail on Windows. When that happens the removal is handed to
+release's filename, same as always), downloading it never collides with anything on disk. Cleanup
+afterward sweeps the mods folder for *every* jar matching this loader's naming prefix other than the
+one just downloaded, rather than deleting one specific filename reconstructed from "the currently
+running version" - observed for real on a server updating 0.1.5 -> 0.1.6, where 0.1.5's own jar
+manifest didn't carry a resolvable version at all, so it went looking for a file that was never
+going to exist and left its real jar sitting there. Sweeping by prefix means a stray copy gets
+cleaned up regardless of what caused it to go unrecognized.
+
+Removing a stale jar is the part that can be blocked: NeoForge/Forge keep every mod jar this JVM
+has loaded open for the process's whole life, so deleting the file this code is presently running
+from can fail on Windows. When that happens the removal is handed to
 `RelaunchHelper#applyOperationsOnExit`, which waits for this JVM to actually exit and then deletes
 it - deliberately not a relaunch of any kind (see `RelaunchOutcome`), since when this server process
 starts again is an admin's decision, not something to act on here. Either way, the update only

@@ -8,6 +8,7 @@ import dev.pluginsync.core.sync.Downloader;
 
 import java.io.IOException;
 import java.nio.file.AccessDeniedException;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -19,13 +20,19 @@ import java.util.Optional;
  * hand.
  *
  * <p>The new jar always lands under a brand-new file name (the version is baked into it, same as
- * every release so far), so downloading it never collides with anything already on disk - it's the
- * <em>old</em> jar's removal that can be blocked: NeoForge/Forge keep every mod jar this JVM has
- * loaded open for the life of the process, so deleting the file this code itself is presently
- * running from can fail with {@link AccessDeniedException} on Windows. When that happens, the
- * removal is hitched to {@link RelaunchHelper#applyOperationsOnExit} - deliberately not a relaunch
- * of any kind, since the next time this server process starts again is an admin's decision, not
- * something to act on here.
+ * every release so far), so downloading it never collides with anything already on disk. Cleanup
+ * afterward sweeps the mods folder for <em>every</em> other jar matching this loader's naming
+ * prefix, rather than trying to delete one specific filename reconstructed from "the currently
+ * running version" - a version that, as observed on a real server updating 0.1.5 -&gt; 0.1.6, isn't
+ * guaranteed to be trustworthy (0.1.5's own jar manifest didn't resolve a version at all, so it
+ * went looking for a file that was never going to exist and left itself behind). Sweeping by
+ * prefix instead means any stray copy - however it got there - eventually gets cleaned up.
+ *
+ * <p>NeoForge/Forge keep every mod jar this JVM has loaded open for the life of the process, so
+ * deleting the file this code itself is presently running from can fail with
+ * {@link AccessDeniedException} on Windows. When that happens, the removal is hitched to
+ * {@link RelaunchHelper#applyOperationsOnExit} - deliberately not a relaunch of any kind, since the
+ * next time this server process starts again is an admin's decision, not something to act on here.
  */
 public final class SelfUpdateSession {
 
@@ -33,7 +40,7 @@ public final class SelfUpdateSession {
         record UpToDate() implements Result {
         }
 
-        /** @param pendingDelete true if the old jar is still on disk, queued for removal once this JVM exits */
+        /** @param pendingDelete true if at least one stale jar is still on disk, queued for removal once this JVM exits */
         record Updated(String newVersion, boolean pendingDelete) implements Result {
         }
     }
@@ -50,11 +57,8 @@ public final class SelfUpdateSession {
         this.downloader = downloader;
     }
 
-    /**
-     * @param modsDir the mods folder this instance is running from
-     * @param currentJarPath this instance's own jar file, to be removed once the new one is in place
-     */
-    public Result run(String currentVersion, String jarNamePrefix, Path modsDir, Path currentJarPath) throws IOException {
+    /** @param modsDir the mods folder this instance is running from */
+    public Result run(String currentVersion, String jarNamePrefix, Path modsDir) throws IOException {
         Optional<SelfUpdateChecker.AvailableUpdate> update = checker.checkForUpdate(currentVersion, jarNamePrefix);
         if (update.isEmpty()) {
             return new Result.UpToDate();
@@ -71,13 +75,22 @@ public final class SelfUpdateSession {
         }
 
         boolean pendingDelete = false;
-        try {
-            Files.deleteIfExists(currentJarPath);
-        } catch (AccessDeniedException e) {
-            PendingOperations pending = new PendingOperations();
-            pending.deletes().add(currentJarPath.toString());
+        PendingOperations pending = new PendingOperations();
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(modsDir, jarNamePrefix + "*.jar")) {
+            for (Path candidate : stream) {
+                if (candidate.getFileName().toString().equals(available.jarFileName())) {
+                    continue;
+                }
+                try {
+                    Files.deleteIfExists(candidate);
+                } catch (AccessDeniedException e) {
+                    pending.deletes().add(candidate.toString());
+                    pendingDelete = true;
+                }
+            }
+        }
+        if (pendingDelete) {
             RelaunchHelper.applyOperationsOnExit(pending);
-            pendingDelete = true;
         }
 
         return new Result.Updated(available.version(), pendingDelete);

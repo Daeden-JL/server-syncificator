@@ -11,7 +11,7 @@ tasks.jar {
 
 allprojects {
     group = "dev.pluginsync"
-    version = "0.1.6"
+    version = "0.1.7"
 
     repositories {
         mavenCentral()
