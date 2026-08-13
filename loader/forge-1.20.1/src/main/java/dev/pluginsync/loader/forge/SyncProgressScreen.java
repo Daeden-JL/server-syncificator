@@ -232,7 +232,7 @@ public final class SyncProgressScreen extends Screen {
     private void renderRestartNeeded(GuiGraphics graphics) {
         graphics.drawCenteredString(font, "Your mods are up to date.", width / 2, height / 2 + 34, 0xFFFFAA00);
         graphics.drawCenteredString(font, "Please restart the game to load them.", width / 2, height / 2 + 46, 0xFFFFAA00);
-        graphics.drawCenteredString(font, "Press Escape to continue.", width / 2, height - 24, 0xFF888888);
+        graphics.drawCenteredString(font, "Press any key to continue.", width / 2, height - 24, 0xFF888888);
     }
 
     /**
@@ -258,13 +258,24 @@ public final class SyncProgressScreen extends Screen {
         if (truncated) {
             graphics.drawCenteredString(font, "(full error in the game log)", width / 2, y, 0xFF888888);
         }
-        graphics.drawCenteredString(font, "Press Escape to continue without syncing.", width / 2, footerY, 0xFF888888);
+        graphics.drawCenteredString(font, "Press any key to continue without syncing.", width / 2, footerY, 0xFF888888);
     }
 
     @Override
     public boolean shouldCloseOnEsc() {
         // Only once the screen has nothing left to do - never mid-sync.
         return errorMessage != null || restartNeeded;
+    }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        // This screen never adds any focusable widgets, so once it's dismissible at all, any key
+        // (not just Escape) should dismiss it - matching the "press any key to continue" prompt.
+        if (shouldCloseOnEsc()) {
+            onClose();
+            return true;
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     @Override

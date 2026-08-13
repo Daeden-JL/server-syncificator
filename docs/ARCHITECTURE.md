@@ -27,8 +27,10 @@ player ever reaches the "Play"/"Multiplayer" button.
 
 `sync-core` has zero Minecraft/Forge/NeoForge dependency. Everything loader-specific is a thin
 adapter: a GUI screen that renders `SyncEvent`s, an overlay that renders the final `SyncStatus` as
-a line on the title screen, and two lifecycle hooks (client title-screen interception, server
-startup). This is what makes "support NeoForge and Forge together" tractable:
+a line on the title screen, a title-screen button that lets the player re-trigger that same GUI
+screen manually ("Check for Updates", or "Sync Updates" once a sync has something pending), and two
+lifecycle hooks (client title-screen interception, server startup). This is what makes "support
+NeoForge and Forge together" tractable:
 the hard logic (protocol, hashing, retries, safe deletion, NBT editing, relaunching) is written and
 tested exactly once.
 
