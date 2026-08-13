@@ -10,7 +10,7 @@ plugins {
     id 'org.parchmentmc.librarian.forgegradle' version '1.+'
 }
 
-version = '0.1.5'
+version = '0.1.6'
 group = 'dev.pluginsync.loader.forge'
 
 base {
@@ -67,4 +67,13 @@ evaluationDependsOn(':sync-core')
 
 jar {
     from project(':sync-core').sourceSets.main.output
+
+    // mods.toml's version = "${file.jarVersion}" only resolves against this manifest attribute -
+    // without it, Forge falls back to an unparseable placeholder that ServerSelfUpdateScheduler's
+    // version comparison reads as "0.0.0", making every real release look newer than whatever is
+    // actually running and triggering a redundant re-download on every single server startup, not
+    // just when an update genuinely exists.
+    manifest {
+        attributes(['Implementation-Version': project.version])
+    }
 }
