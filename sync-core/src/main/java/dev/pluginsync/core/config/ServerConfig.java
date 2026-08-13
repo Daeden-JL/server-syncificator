@@ -26,6 +26,15 @@ public final class ServerConfig {
     private boolean autoServeModsFolder = true;
     /** Public host/IP clients should use to reach the sync HTTP endpoint, e.g. "play.example.com". */
     private String publicHost = "";
+    /**
+     * When true (the default), the server checks GitHub for a newer syncificator release itself -
+     * on startup and once a day while running - and downloads it if found. The old jar is removed
+     * immediately if possible, or queued for removal the moment this JVM exits otherwise; either
+     * way the update only takes effect the next time an admin restarts the server themselves - this
+     * never triggers a restart on its own. Once the new jar is being served from the mods folder,
+     * clients pick it up the same way they pick up any other updated mod.
+     */
+    private boolean selfUpdateEnabled = true;
     private List<ServerModConfigEntry> mods = new ArrayList<>();
 
     public String serverName() {
@@ -50,6 +59,10 @@ public final class ServerConfig {
 
     public boolean autoServeModsFolder() {
         return autoServeModsFolder;
+    }
+
+    public boolean selfUpdateEnabled() {
+        return selfUpdateEnabled;
     }
 
     public List<ServerModConfigEntry> mods() {

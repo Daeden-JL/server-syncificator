@@ -92,6 +92,30 @@ public final class RelaunchHelper {
                 : new RelaunchOutcome.ApplyScheduledOnly(process);
     }
 
+    /**
+     * Like {@link #relaunchWithPendingOperations}, but never attempts to restart anything
+     * afterward - only waits for this JVM to exit, then applies the pending operations. For a
+     * caller where the <em>next</em> process launch is entirely outside this JVM's control (e.g. a
+     * dedicated server's self-updater, where an admin restarts the server process manually,
+     * possibly hours or days later) and reconstructing a relaunch command would be wrong to attempt
+     * regardless of whether the platform could support one.
+     */
+    public static Process applyOperationsOnExit(PendingOperations operations) throws IOException {
+        long currentPid = ProcessHandle.current().pid();
+
+        Path scriptPath = WINDOWS
+                ? writeWindowsScript(currentPid, operations, null)
+                : writePosixScript(currentPid, operations, null);
+
+        List<String> scriptCommand = WINDOWS
+                ? List.of("cmd.exe", "/c", scriptPath.toString())
+                : List.of("/bin/sh", scriptPath.toString());
+
+        ProcessBuilder builder = new ProcessBuilder(scriptCommand);
+        builder.directory(Path.of(System.getProperty("user.dir")).toFile());
+        return builder.start();
+    }
+
     /** Same as {@link #buildRelaunchCommand()}, but reports unavailability via {@code null} instead of throwing. */
     private static List<String> tryBuildRelaunchCommand() {
         try {

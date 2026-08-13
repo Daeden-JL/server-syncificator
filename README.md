@@ -11,9 +11,9 @@ now go manually re-download 40 jars."
 This repository currently ships:
 
 - **`sync-core`** - a complete, loader-agnostic Java library containing the whole sync protocol:
-  manifest fetch/serve, diffing, hashing, downloading, a hand-rolled `servers.dat` NBT editor, and
-  a JVM relaunch helper. It has no Minecraft/Forge/NeoForge dependency and is fully unit tested
-  (`./gradlew :sync-core:test`).
+  manifest fetch/serve, diffing, hashing, downloading, a hand-rolled `servers.dat` NBT editor, a JVM
+  relaunch helper, and a GitHub-releases self-update checker for the server. It has no
+  Minecraft/Forge/NeoForge dependency and is fully unit tested (`./gradlew :sync-core:test`).
 - **`loader/forge-1.20.1`** and **`loader/neoforge-1.21.1`** - thin per-loader adapters (client GUI
   screen + server startup hook) that wire `sync-core` into an actual mod.
 
@@ -51,6 +51,11 @@ see [docs/ADDING_A_LOADER_VERSION.md](docs/ADDING_A_LOADER_VERSION.md).
    The sync endpoint is a plain HTTP server on its own port (`httpPort`, default **25585**) -
    separate from Minecraft's own port, and configurable in that file. Open/forward it alongside
    25565.
+
+   The server also checks GitHub for a newer syncificator release itself (on startup, then daily)
+   and downloads it if found - restart the server to run it once you see that in the log. Set
+   `"selfUpdateEnabled": false` to turn this off. See
+   [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#selfupdateenabled-default-true---the-server-updates-itself).
 2. Restart the server. It now serves a manifest on `http://<publicHost>:<httpPort>/daedens-server-syncificator/v1/manifest`.
 3. **Client**: put the matching mod jar in the client's `mods` folder and launch once. The mod
    writes `config/daedens-server-syncificator-client.json` and stays idle until you point it at a
